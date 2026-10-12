@@ -1,0 +1,14 @@
+{
+    "name": "AS.Enemies",
+    "rootNamespace": "AS.Enemies",
+    "references": ["AS.Core", "AS.Combat"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

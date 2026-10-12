@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using AS.Combat;
 using AS.Core;
+using AS.Enemies;
 using AS.Player;
 using Unity.Cinemachine;
 using UnityEditor;
@@ -25,6 +26,7 @@ namespace AS.EditorTools
         const string Root = "Assets/_Project";
         const string InputActionsPath = "Assets/Settings/InputSystem_Actions.inputactions";
         const string ArenaScenePath = Root + "/Scenes/Arena.unity";
+        const string ChaserPrefabPath = Root + "/Prefabs/Enemies/Chaser.prefab";
 
         // Interior of the arena, in world units. Walls sit just outside it.
         const float HalfWidth = 16f;
@@ -35,6 +37,7 @@ namespace AS.EditorTools
         static readonly Color WallColor = new(0.32f, 0.36f, 0.48f);
         static readonly Color PlayerColor = new(0.35f, 0.9f, 1f);
         static readonly Color BulletColor = new(1f, 0.9f, 0.35f);
+        static readonly Color ChaserColor = new(1f, 0.32f, 0.36f);
 
         [MenuItem("AS/Setup/Build Arena Scene")]
         public static void Run()
@@ -44,6 +47,7 @@ namespace AS.EditorTools
 
             var circle = CreateSprite("Circle", 128, CircleAlpha, FilterMode.Bilinear);
             var square = CreateSprite("Square", 4, (_, _, _) => 1f, FilterMode.Point);
+            var triangle = CreateSprite("Triangle", 128, TriangleAlpha, FilterMode.Bilinear);
 
             var input = CreateAsset(ScriptableObject.CreateInstance<InputReader>(), Root + "/Data/Input/InputReader.asset");
             SetRef(input, "actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath));
@@ -51,6 +55,9 @@ namespace AS.EditorTools
             var bullet = CreateBulletPrefab(circle, layers.PlayerShot);
             var blaster = CreateAsset(ScriptableObject.CreateInstance<WeaponData>(), Root + "/Data/Weapons/Weapon_Blaster.asset");
             SetRef(blaster, "projectilePrefab", bullet);
+
+            var chaserData = CreateAsset(ScriptableObject.CreateInstance<EnemyData>(), Root + "/Data/Enemies/Enemy_Chaser.asset");
+            CreateChaserPrefab(chaserData, triangle, layers);
 
             BuildArenaScene(input, blaster, circle, square, layers);
 
@@ -168,6 +175,14 @@ namespace AS.EditorTools
             return Mathf.Clamp01(radius - distance);
         }
 
+        /// <summary>Isosceles triangle pointing right (+X), so a rotation of 0 faces east.</summary>
+        static float TriangleAlpha(int x, int y, int size)
+        {
+            float u = (x + 0.5f) / size;
+            float v = (y + 0.5f) / size;
+            return Mathf.Clamp01((0.5f * (1f - u) - Mathf.Abs(v - 0.5f)) * size);
+        }
+
         /// <summary>White sprite, one world unit across, so scale = size in units.</summary>
         static Sprite CreateSprite(string name, int size, Func<int, int, int, float> alpha, FilterMode filter)
         {
@@ -220,11 +235,40 @@ namespace AS.EditorTools
             return prefab.GetComponent<Projectile>();
         }
 
+        static void CreateChaserPrefab(EnemyData data, Sprite triangle, LayerSet layers)
+        {
+            var go = new GameObject("Chaser") { layer = layers.Enemy };
+
+            var body = go.AddComponent<Rigidbody2D>();
+            body.gravityScale = 0f;
+            body.freezeRotation = true;
+            body.interpolation = RigidbodyInterpolation2D.Interpolate;
+            go.AddComponent<CircleCollider2D>().radius = 0.4f;
+            var health = go.AddComponent<Health>();
+
+            var visual = Quad("Visual", go.transform, Vector2.zero, new Vector2(0.9f, 0.9f), triangle, ChaserColor, 8);
+            visual.layer = layers.Enemy;
+
+            var flash = go.AddComponent<DamageFlash>();
+            SetRef(flash, "health", health);
+            SetRef(flash, "target", visual.GetComponent<SpriteRenderer>());
+
+            var chaser = go.AddComponent<Chaser>();
+            SetRef(chaser, "data", data);
+            SetRef(chaser, "visual", visual.transform);
+            SetInt(chaser, "contactTargets", 1 << layers.Player);
+
+            PrefabUtility.SaveAsPrefabAsset(go, ChaserPrefabPath);
+            Object.DestroyImmediate(go);
+        }
+
         // ------------------------------------------------------------------ scene
 
         static void BuildArenaScene(InputReader input, WeaponData weapon, Sprite circle, Sprite square, LayerSet layers)
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            // NewScene unloads unreferenced assets, which invalidates prefab handles taken before it.
+            var enemy = AssetDatabase.LoadAssetAtPath<Chaser>(ChaserPrefabPath);
 
             var light = new GameObject("Global Light 2D").AddComponent<Light2D>();
             light.lightType = Light2D.LightType.Global;
@@ -233,6 +277,7 @@ namespace AS.EditorTools
             var cameraBounds = BuildArena(square, layers.Wall);
             var player = BuildPlayer(input, weapon, circle, square, layers.Player);
             BuildCamera(player.transform, cameraBounds);
+            BuildSpawner(enemy, player.transform);
 
             EditorSceneManager.SaveScene(scene, ArenaScenePath);
         }
@@ -281,9 +326,20 @@ namespace AS.EditorTools
             body.gravityScale = 0f;
             body.freezeRotation = true;
             body.interpolation = RigidbodyInterpolation2D.Interpolate;
+            body.mass = 3f; // heavier than enemies so a crowd can't shove the player around
             player.AddComponent<CircleCollider2D>().radius = 0.45f;
 
-            Quad("Body", player.transform, Vector2.zero, new Vector2(0.9f, 0.9f), circle, PlayerColor, 10).layer = layer;
+            var health = player.AddComponent<Health>();
+            SetFloat(health, "maxHealth", 5f);
+            SetFloat(health, "invulnerabilityTime", 1f);
+
+            var bodyVisual = Quad("Body", player.transform, Vector2.zero, new Vector2(0.9f, 0.9f), circle, PlayerColor, 10);
+            bodyVisual.layer = layer;
+            var flash = player.AddComponent<DamageFlash>();
+            SetRef(flash, "health", health);
+            SetRef(flash, "target", bodyVisual.GetComponent<SpriteRenderer>());
+            SetColor(flash, "flashColor", new Color(1f, 0.25f, 0.25f));
+            SetFloat(flash, "duration", 0.15f);
 
             var pivot = new GameObject("AimPivot") { layer = layer }.transform;
             pivot.SetParent(player.transform, false);
@@ -304,7 +360,34 @@ namespace AS.EditorTools
             SetRef(controller, "input", input);
             SetRef(controller, "aim", aim);
             SetRef(controller, "weapon", weapon);
+            SetRef(controller, "health", health);
             return player;
+        }
+
+        static void BuildSpawner(EnemyBase enemy, Transform target)
+        {
+            var spawnerGo = new GameObject("EnemySpawner");
+            var spawner = spawnerGo.AddComponent<EnemySpawner>();
+
+            // Corners and edge midpoints, just inside the walls.
+            float x = HalfWidth - 1.5f, y = HalfHeight - 1.5f;
+            var positions = new[]
+            {
+                new Vector2(-x, y), new Vector2(0f, y), new Vector2(x, y), new Vector2(x, 0f),
+                new Vector2(x, -y), new Vector2(0f, -y), new Vector2(-x, -y), new Vector2(-x, 0f),
+            };
+            var points = new Object[positions.Length];
+            for (int i = 0; i < positions.Length; i++)
+            {
+                var point = new GameObject($"SpawnPoint_{i}").transform;
+                point.SetParent(spawnerGo.transform, false);
+                point.position = positions[i];
+                points[i] = point;
+            }
+
+            SetRef(spawner, "prefab", enemy);
+            SetRef(spawner, "target", target);
+            SetList(spawner, "spawnPoints", points);
         }
 
         static void BuildCamera(Transform target, PolygonCollider2D bounds)
@@ -355,7 +438,7 @@ namespace AS.EditorTools
             go.AddComponent<BoxCollider2D>();
         }
 
-        static void SetRef(Object target, string property, Object value)
+        static void Modify(Object target, string property, Action<SerializedProperty> set)
         {
             var so = new SerializedObject(target);
             var prop = so.FindProperty(property);
@@ -364,9 +447,26 @@ namespace AS.EditorTools
                 Debug.LogError($"[SceneBuilder] {target.GetType().Name} has no serialized field '{property}'.");
                 return;
             }
-            prop.objectReferenceValue = value;
+            set(prop);
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(target);
         }
+
+        static void SetRef(Object target, string property, Object value) => Modify(target, property, p =>
+        {
+            p.objectReferenceValue = value;
+            // Unity silently stores null for destroyed handles or mismatched types.
+            if (!ReferenceEquals(value, null) && p.objectReferenceValue == null)
+                Debug.LogError($"[SceneBuilder] {target.GetType().Name}.{property} could not be set (destroyed or wrong type).");
+        });
+        static void SetFloat(Object target, string property, float value) => Modify(target, property, p => p.floatValue = value);
+        static void SetInt(Object target, string property, int value) => Modify(target, property, p => p.intValue = value);
+        static void SetColor(Object target, string property, Color value) => Modify(target, property, p => p.colorValue = value);
+
+        static void SetList(Object target, string property, Object[] values) => Modify(target, property, p =>
+        {
+            p.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++) p.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
+        });
     }
 }

@@ -8,6 +8,7 @@
         "Unity.InputSystem.TestFramework",
         "AS.Core",
         "AS.Combat",
+        "AS.Enemies",
         "AS.Player"
     ],
     "includePlatforms": [],
