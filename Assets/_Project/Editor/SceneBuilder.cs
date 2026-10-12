@@ -4,12 +4,18 @@ using AS.Combat;
 using AS.Core;
 using AS.Enemies;
 using AS.Player;
+using AS.UI;
+using AS.Waves;
 using Unity.Cinemachine;
 using UnityEditor;
+using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace AS.EditorTools
@@ -27,6 +33,10 @@ namespace AS.EditorTools
         const string InputActionsPath = "Assets/Settings/InputSystem_Actions.inputactions";
         const string ArenaScenePath = Root + "/Scenes/Arena.unity";
         const string ChaserPrefabPath = Root + "/Prefabs/Enemies/Chaser.prefab";
+
+        // Authored waves (all Chasers until step 4 adds enemy types). Endless scaling takes over after the last.
+        static readonly (int count, float interval)[] AuthoredWaves = { (6, 1f), (10, 0.8f), (16, 0.6f) };
+        static string WavePath(int index) => $"{Root}/Data/Waves/Wave_{index + 1:00}.asset";
 
         // Interior of the arena, in world units. Walls sit just outside it.
         const float HalfWidth = 16f;
@@ -58,6 +68,7 @@ namespace AS.EditorTools
 
             var chaserData = CreateAsset(ScriptableObject.CreateInstance<EnemyData>(), Root + "/Data/Enemies/Enemy_Chaser.asset");
             CreateChaserPrefab(chaserData, triangle, layers);
+            CreateWaves(AssetDatabase.LoadAssetAtPath<Chaser>(ChaserPrefabPath));
 
             BuildArenaScene(input, blaster, circle, square, layers);
 
@@ -136,6 +147,7 @@ namespace AS.EditorTools
 
             changed |= AddAction(map, "Aim", InputActionType.Value, "Vector2", ("<Gamepad>/rightStick", "Gamepad"));
             changed |= AddAction(map, "Point", InputActionType.Value, "Vector2", ("<Mouse>/position", "Keyboard&Mouse"));
+            changed |= AddAction(map, "Pause", InputActionType.Button, null, ("<Keyboard>/escape", "Keyboard&Mouse"), ("<Gamepad>/start", "Gamepad"));
 
             if (changed)
             {
@@ -267,8 +279,13 @@ namespace AS.EditorTools
         static void BuildArenaScene(InputReader input, WeaponData weapon, Sprite circle, Sprite square, LayerSet layers)
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            // NewScene unloads unreferenced assets, which invalidates prefab handles taken before it.
-            var enemy = AssetDatabase.LoadAssetAtPath<Chaser>(ChaserPrefabPath);
+            // NewScene unloads unreferenced assets, which invalidates handles taken before it:
+            // load prefabs and the wave list by path from here on.
+            var waves = new Object[AuthoredWaves.Length];
+            for (int i = 0; i < waves.Length; i++) waves[i] = AssetDatabase.LoadAssetAtPath<WaveDefinition>(WavePath(i));
+
+            var gameManager = new GameObject("GameManager").AddComponent<GameManager>();
+            SetRef(gameManager, "input", input);
 
             var light = new GameObject("Global Light 2D").AddComponent<Light2D>();
             light.lightType = Light2D.LightType.Global;
@@ -277,9 +294,36 @@ namespace AS.EditorTools
             var cameraBounds = BuildArena(square, layers.Wall);
             var player = BuildPlayer(input, weapon, circle, square, layers.Player);
             BuildCamera(player.transform, cameraBounds);
-            BuildSpawner(enemy, player.transform);
+            var spawner = BuildSpawner(player.transform);
+
+            var director = new GameObject("WaveDirector").AddComponent<WaveDirector>();
+            SetRef(director, "spawner", spawner);
+            SetList(director, "waves", waves);
+
+            BuildUI(gameManager, square);
 
             EditorSceneManager.SaveScene(scene, ArenaScenePath);
+        }
+
+        static void CreateWaves(Chaser chaser)
+        {
+            for (int i = 0; i < AuthoredWaves.Length; i++)
+            {
+                string path = WavePath(i);
+                if (AssetDatabase.LoadAssetAtPath<WaveDefinition>(path) != null) continue;
+
+                var wave = ScriptableObject.CreateInstance<WaveDefinition>();
+                AssetDatabase.CreateAsset(wave, path);
+                SetFloat(wave, "spawnInterval", AuthoredWaves[i].interval);
+                int count = AuthoredWaves[i].count;
+                Modify(wave, "groups", p =>
+                {
+                    p.arraySize = 1;
+                    var group = p.GetArrayElementAtIndex(0);
+                    group.FindPropertyRelative("enemy").objectReferenceValue = chaser;
+                    group.FindPropertyRelative("count").intValue = count;
+                });
+            }
         }
 
         static PolygonCollider2D BuildArena(Sprite square, int wallLayer)
@@ -364,7 +408,7 @@ namespace AS.EditorTools
             return player;
         }
 
-        static void BuildSpawner(EnemyBase enemy, Transform target)
+        static EnemySpawner BuildSpawner(Transform target)
         {
             var spawnerGo = new GameObject("EnemySpawner");
             var spawner = spawnerGo.AddComponent<EnemySpawner>();
@@ -385,9 +429,155 @@ namespace AS.EditorTools
                 points[i] = point;
             }
 
-            SetRef(spawner, "prefab", enemy);
             SetRef(spawner, "target", target);
             SetList(spawner, "spawnPoints", points);
+            return spawner;
+        }
+
+        // ------------------------------------------------------------------ UI
+
+        static readonly Color PanelTextColor = new(0.92f, 0.95f, 1f);
+
+        static void BuildUI(GameManager gameManager, Sprite square)
+        {
+            new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+
+            var canvasGo = new GameObject("UI", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            canvasGo.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = canvasGo.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
+            var canvas = canvasGo.transform;
+
+            // HUD
+            var hudGo = UIElement("HUD", canvas);
+            Stretch(hudGo);
+            var hud = hudGo.AddComponent<HUD>();
+
+            var barBg = UIImage("HealthBarBg", hudGo.transform, square, new Color(0f, 0f, 0f, 0.6f));
+            Anchor(barBg.rectTransform, new Vector2(0f, 1f), new Vector2(40f, -40f), new Vector2(360f, 28f));
+            var fill = UIImage("HealthFill", barBg.transform, square, PlayerColor);
+            Stretch(fill.gameObject, 4f);
+            fill.type = Image.Type.Filled;
+            fill.fillMethod = Image.FillMethod.Horizontal;
+
+            var score = UIText("Score", hudGo.transform, "SCORE 0", 40, TextAnchor.UpperRight);
+            Anchor(score.rectTransform, new Vector2(1f, 1f), new Vector2(-40f, -30f), new Vector2(500f, 60f));
+            var wave = UIText("Wave", hudGo.transform, "", 36, TextAnchor.UpperCenter);
+            Anchor(wave.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(400f, 60f));
+            var banner = UIText("Banner", hudGo.transform, "", 110, TextAnchor.MiddleCenter);
+            banner.fontStyle = FontStyle.Bold;
+            Anchor(banner.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 200f), new Vector2(1400f, 200f));
+
+            SetRef(hud, "healthFill", fill);
+            SetRef(hud, "scoreText", score);
+            SetRef(hud, "waveText", wave);
+            SetRef(hud, "bannerText", banner);
+
+            // Pause menu
+            var pause = Panel<PauseMenu>("PauseMenu", canvas, square, new Color(0f, 0f, 0f, 0.65f));
+            Anchor(UIText("Title", pause.transform, "PAUSED", 96, TextAnchor.MiddleCenter).rectTransform,
+                new Vector2(0.5f, 0.5f), new Vector2(0f, 160f), new Vector2(1000f, 140f));
+            var resume = UIButton("Resume", pause.transform, square, new Vector2(0f, 10f));
+            var pauseRestart = UIButton("Restart", pause.transform, square, new Vector2(0f, -80f));
+            UnityEventTools.AddPersistentListener(resume.onClick, gameManager.Resume);
+            UnityEventTools.AddPersistentListener(pauseRestart.onClick, gameManager.Restart);
+            SetRef(pause, "firstSelected", resume.gameObject);
+
+            // Game over
+            var gameOver = Panel<GameOverScreen>("GameOverScreen", canvas, square, new Color(0.08f, 0f, 0.02f, 0.78f));
+            var title = UIText("Title", gameOver.transform, "GAME OVER", 120, TextAnchor.MiddleCenter);
+            title.fontStyle = FontStyle.Bold;
+            title.color = new Color(1f, 0.4f, 0.42f);
+            Anchor(title.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 200f), new Vector2(1200f, 160f));
+            var summary = UIText("Summary", gameOver.transform, "", 44, TextAnchor.MiddleCenter);
+            Anchor(summary.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(1000f, 140f));
+            var restart = UIButton("Restart", gameOver.transform, square, new Vector2(0f, -100f));
+            UnityEventTools.AddPersistentListener(restart.onClick, gameManager.Restart);
+            SetRef(gameOver, "summaryText", summary);
+            SetRef(gameOver, "firstSelected", restart.gameObject);
+        }
+
+        /// <summary>Full-screen panel with a dimming background, hidden in the editor so the scene stays readable.</summary>
+        static T Panel<T>(string name, Transform parent, Sprite square, Color background) where T : UIPanel
+        {
+            var go = UIElement(name, parent);
+            Stretch(go);
+            var group = go.AddComponent<CanvasGroup>();
+            group.alpha = 0f;
+            group.interactable = false;
+            group.blocksRaycasts = false;
+            var image = go.AddComponent<Image>();
+            image.sprite = square;
+            image.color = background;
+            return go.AddComponent<T>();
+        }
+
+        static GameObject UIElement(string name, Transform parent)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            return go;
+        }
+
+        static Image UIImage(string name, Transform parent, Sprite sprite, Color color)
+        {
+            var image = UIElement(name, parent).AddComponent<Image>();
+            image.sprite = sprite;
+            image.color = color;
+            image.raycastTarget = false;
+            return image;
+        }
+
+        static Text UIText(string name, Transform parent, string content, int size, TextAnchor alignment)
+        {
+            var text = UIElement(name, parent).AddComponent<Text>();
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.text = content;
+            text.fontSize = size;
+            text.alignment = alignment;
+            text.color = PanelTextColor;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.raycastTarget = false;
+            return text;
+        }
+
+        static Button UIButton(string label, Transform parent, Sprite square, Vector2 position)
+        {
+            var go = UIElement(label + "Button", parent);
+            Anchor(go.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), position, new Vector2(360f, 70f));
+            var image = go.AddComponent<Image>();
+            image.sprite = square;
+            var button = go.AddComponent<Button>();
+            var colors = button.colors;
+            colors.normalColor = new Color(0.2f, 0.24f, 0.32f);
+            colors.highlightedColor = new Color(0.3f, 0.55f, 0.7f);
+            colors.selectedColor = new Color(0.3f, 0.55f, 0.7f);
+            colors.pressedColor = new Color(0.2f, 0.42f, 0.55f);
+            button.colors = colors;
+
+            var text = UIText("Label", go.transform, label.ToUpperInvariant(), 34, TextAnchor.MiddleCenter);
+            Stretch(text.gameObject);
+            return button;
+        }
+
+        static void Stretch(GameObject go, float inset = 0f)
+        {
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = new Vector2(inset, inset);
+            rt.offsetMax = new Vector2(-inset, -inset);
+        }
+
+        static void Anchor(RectTransform rt, Vector2 anchor, Vector2 position, Vector2 size)
+        {
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.pivot = anchor;
+            rt.anchoredPosition = position;
+            rt.sizeDelta = size;
         }
 
         static void BuildCamera(Transform target, PolygonCollider2D bounds)

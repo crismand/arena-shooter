@@ -11,8 +11,10 @@ namespace AS.Enemies
         [SerializeField, Min(0f)] float acceleration = 20f;
         [Tooltip("Damage dealt to the player on touch.")]
         [SerializeField, Min(0f)] float contactDamage = 1f;
+        [SerializeField, Min(0)] int scoreValue = 10;
 
         public float MaxHealth => maxHealth;
+        public int ScoreValue => scoreValue;
         public float MoveSpeed => moveSpeed;
         public float Acceleration => acceleration;
         public float ContactDamage => contactDamage;
