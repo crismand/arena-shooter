@@ -6,7 +6,7 @@ namespace AS.Player
 {
     /// <summary>
     /// Eight-way movement plus firing while the trigger is held or the aim stick is pushed.
-    /// Leaves play when its <see cref="Health"/> runs out.
+    /// Reports its health on the event bus and leaves play when it runs out.
     /// </summary>
     [RequireComponent(typeof(Rigidbody2D))]
     public class PlayerController : MonoBehaviour
@@ -25,22 +25,17 @@ namespace AS.Player
 
         void OnEnable()
         {
-            input.Enable();
+            health.Damaged += OnDamaged;
             health.Died += OnDied;
         }
 
         void OnDisable()
         {
-            input.Disable();
+            health.Damaged -= OnDamaged;
             health.Died -= OnDied;
         }
 
-        // Placeholder until the game-over flow (step 3): take the player out of play.
-        void OnDied()
-        {
-            Debug.Log("[Player] Died.");
-            gameObject.SetActive(false);
-        }
+        void Start() => PublishHealth();
 
         void Update()
         {
@@ -52,5 +47,15 @@ namespace AS.Player
             Vector2 target = Vector2.ClampMagnitude(input.Move, 1f) * moveSpeed;
             _body.linearVelocity = Vector2.MoveTowards(_body.linearVelocity, target, acceleration * Time.fixedDeltaTime);
         }
+
+        void OnDamaged(DamageInfo _) => PublishHealth();
+
+        void OnDied()
+        {
+            EventBus.Publish(new PlayerDied());
+            gameObject.SetActive(false);
+        }
+
+        void PublishHealth() => EventBus.Publish(new PlayerHealthChanged(health.Current, health.Max));
     }
 }

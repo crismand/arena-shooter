@@ -1,0 +1,14 @@
+{
+    "name": "AS.Waves",
+    "rootNamespace": "AS.Waves",
+    "references": ["AS.Core", "AS.Enemies"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

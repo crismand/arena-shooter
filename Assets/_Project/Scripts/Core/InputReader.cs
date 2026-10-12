@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -5,7 +6,8 @@ namespace AS.Core
 {
     /// <summary>
     /// Wraps the Input System actions asset so gameplay code never touches devices directly.
-    /// Expected actions in the "Player" map: Move, Aim (right stick), Point (mouse position), Attack.
+    /// Expected actions in the "Player" map: Move, Aim (right stick), Point (mouse position),
+    /// Attack, Pause. Enabled and disabled by <see cref="GameManager"/>.
     /// </summary>
     [CreateAssetMenu(menuName = "AS/Input Reader", fileName = "InputReader")]
     public class InputReader : ScriptableObject
@@ -18,13 +20,19 @@ namespace AS.Core
         InputAction _aim;
         InputAction _point;
         InputAction _fire;
+        InputAction _pause;
 
-        public Vector2 Move => Read(_move);
+        public event Action PausePressed;
+
+        /// <summary>When false, movement, aim and fire read as idle (pause still fires).</summary>
+        public bool GameplayEnabled { get; set; } = true;
+
+        public Vector2 Move => GameplayEnabled ? Read(_move) : Vector2.zero;
         /// <summary>Gamepad right stick, -1..1.</summary>
-        public Vector2 AimStick => Read(_aim);
+        public Vector2 AimStick => GameplayEnabled ? Read(_aim) : Vector2.zero;
         /// <summary>Mouse position in screen pixels.</summary>
         public Vector2 PointerPosition => Read(_point);
-        public bool FireHeld => _fire != null && _fire.IsPressed();
+        public bool FireHeld => GameplayEnabled && _fire != null && _fire.IsPressed();
 
         public void Enable()
         {
@@ -35,20 +43,28 @@ namespace AS.Core
                 return;
             }
 
+            // The asset outlives scene reloads; a restart from pause must not leave gameplay off.
+            GameplayEnabled = true;
+
             _map = actions.FindActionMap(playerMapName, throwIfNotFound: true);
             _move = _map.FindAction("Move", throwIfNotFound: true);
             _aim = _map.FindAction("Aim", throwIfNotFound: true);
             _point = _map.FindAction("Point", throwIfNotFound: true);
             _fire = _map.FindAction("Attack", throwIfNotFound: true);
+            _pause = _map.FindAction("Pause", throwIfNotFound: true);
+            _pause.performed += OnPause;
             _map.Enable();
         }
 
         public void Disable()
         {
+            if (_pause != null) _pause.performed -= OnPause;
             _map?.Disable();
             _map = null;
-            _move = _aim = _point = _fire = null;
+            _move = _aim = _point = _fire = _pause = null;
         }
+
+        void OnPause(InputAction.CallbackContext _) => PausePressed?.Invoke();
 
         static Vector2 Read(InputAction action) => action != null ? action.ReadValue<Vector2>() : Vector2.zero;
     }

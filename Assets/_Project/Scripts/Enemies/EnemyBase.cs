@@ -1,12 +1,14 @@
 using System;
 using AS.Combat;
+using AS.Core;
 using UnityEngine;
 
 namespace AS.Enemies
 {
     /// <summary>
     /// Shared enemy behaviour: steering toward a desired velocity, facing its movement, damaging
-    /// whatever it touches on <see cref="contactTargets"/>, and returning to its pool on death.
+    /// whatever it touches on <see cref="contactTargets"/>, and announcing its death
+    /// (<see cref="EnemyKilled"/>) before returning to its pool.
     /// Subclasses only decide where they want to go.
     /// </summary>
     [RequireComponent(typeof(Rigidbody2D), typeof(Health))]
@@ -65,6 +67,7 @@ namespace AS.Enemies
 
         void OnDied()
         {
+            EventBus.Publish(new EnemyKilled(data.ScoreValue, transform.position));
             if (_release != null) _release(this);
             else Destroy(gameObject);
         }
