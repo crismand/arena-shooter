@@ -3,6 +3,7 @@ using System.IO;
 using AS.Combat;
 using AS.Core;
 using AS.Enemies;
+using AS.Pickups;
 using AS.Player;
 using AS.UI;
 using AS.Waves;
@@ -32,10 +33,27 @@ namespace AS.EditorTools
         const string Root = "Assets/_Project";
         const string InputActionsPath = "Assets/Settings/InputSystem_Actions.inputactions";
         const string ArenaScenePath = Root + "/Scenes/Arena.unity";
+        const string PlayerBulletPrefabPath = Root + "/Prefabs/Projectiles/PlayerBullet.prefab";
+        const string EnemyBulletPrefabPath = Root + "/Prefabs/Projectiles/EnemyBullet.prefab";
         const string ChaserPrefabPath = Root + "/Prefabs/Enemies/Chaser.prefab";
+        const string ShooterPrefabPath = Root + "/Prefabs/Enemies/Shooter.prefab";
+        const string TankPrefabPath = Root + "/Prefabs/Enemies/Tank.prefab";
+        const string PickupPrefabPath = Root + "/Prefabs/Pickups/Pickup.prefab";
+        static readonly string[] PowerUpPaths =
+        {
+            Root + "/Data/PowerUps/PowerUp_Spread.asset",
+            Root + "/Data/PowerUps/PowerUp_Rapid.asset",
+            Root + "/Data/PowerUps/PowerUp_Shield.asset",
+        };
 
-        // Authored waves (all Chasers until step 4 adds enemy types). Endless scaling takes over after the last.
-        static readonly (int count, float interval)[] AuthoredWaves = { (6, 1f), (10, 0.8f), (16, 0.6f) };
+        // Authored waves; endless scaling continues from the last one. Each group is (enemy prefab, count).
+        static readonly (float interval, (string enemy, int count)[] groups)[] AuthoredWaves =
+        {
+            (1.0f, new[] { (ChaserPrefabPath, 6) }),
+            (0.85f, new[] { (ChaserPrefabPath, 8), (ShooterPrefabPath, 2) }),
+            (0.7f, new[] { (ChaserPrefabPath, 10), (ShooterPrefabPath, 3), (TankPrefabPath, 1) }),
+            (0.6f, new[] { (ChaserPrefabPath, 12), (ShooterPrefabPath, 4), (TankPrefabPath, 2) }),
+        };
         static string WavePath(int index) => $"{Root}/Data/Waves/Wave_{index + 1:00}.asset";
 
         // Interior of the arena, in world units. Walls sit just outside it.
@@ -48,6 +66,10 @@ namespace AS.EditorTools
         static readonly Color PlayerColor = new(0.35f, 0.9f, 1f);
         static readonly Color BulletColor = new(1f, 0.9f, 0.35f);
         static readonly Color ChaserColor = new(1f, 0.32f, 0.36f);
+        static readonly Color ShooterColor = new(0.78f, 0.45f, 1f);
+        static readonly Color TankColor = new(0.62f, 0.16f, 0.2f);
+        static readonly Color EnemyBulletColor = new(1f, 0.45f, 0.85f);
+        static readonly Color ShieldColor = new(0.45f, 0.8f, 1f, 0.35f);
 
         [MenuItem("AS/Setup/Build Arena Scene")]
         public static void Run()
@@ -62,13 +84,62 @@ namespace AS.EditorTools
             var input = CreateAsset(ScriptableObject.CreateInstance<InputReader>(), Root + "/Data/Input/InputReader.asset");
             SetRef(input, "actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath));
 
-            var bullet = CreateBulletPrefab(circle, layers.PlayerShot);
+            // Weapons
+            var bullet = CreateBulletPrefab("PlayerBullet", PlayerBulletPrefabPath, circle, BulletColor, new Vector2(0.4f, 0.22f), layers.PlayerShot);
+            var enemyBullet = CreateBulletPrefab("EnemyBullet", EnemyBulletPrefabPath, circle, EnemyBulletColor, new Vector2(0.32f, 0.32f), layers.EnemyShot);
+
             var blaster = CreateAsset(ScriptableObject.CreateInstance<WeaponData>(), Root + "/Data/Weapons/Weapon_Blaster.asset");
             SetRef(blaster, "projectilePrefab", bullet);
+            var spread = CreateOrLoad<WeaponData>(Root + "/Data/Weapons/Weapon_Spread.asset", w =>
+            {
+                SetFloat(w, "fireRate", 5f);
+                SetFloat(w, "projectileSpeed", 16f);
+                SetFloat(w, "projectileLifetime", 1.2f);
+                SetInt(w, "projectileCount", 5);
+                SetFloat(w, "spreadAngle", 40f);
+            });
+            SetRef(spread, "projectilePrefab", bullet);
+            var rapid = CreateOrLoad<WeaponData>(Root + "/Data/Weapons/Weapon_Rapid.asset", w =>
+            {
+                SetFloat(w, "fireRate", 16f);
+                SetFloat(w, "projectileSpeed", 20f);
+                SetFloat(w, "projectileLifetime", 1.2f);
+            });
+            SetRef(rapid, "projectilePrefab", bullet);
+            var enemyBlaster = CreateOrLoad<WeaponData>(Root + "/Data/Weapons/Weapon_EnemyBlaster.asset", w =>
+            {
+                SetFloat(w, "fireRate", 0.8f);
+                SetFloat(w, "projectileSpeed", 9f);
+                SetFloat(w, "projectileLifetime", 3f);
+            });
+            SetRef(enemyBlaster, "projectilePrefab", enemyBullet);
 
+            // Enemies
             var chaserData = CreateAsset(ScriptableObject.CreateInstance<EnemyData>(), Root + "/Data/Enemies/Enemy_Chaser.asset");
-            CreateChaserPrefab(chaserData, triangle, layers);
-            CreateWaves(AssetDatabase.LoadAssetAtPath<Chaser>(ChaserPrefabPath));
+            var shooterData = CreateOrLoad<EnemyData>(Root + "/Data/Enemies/Enemy_Shooter.asset", d =>
+                SetEnemyStats(d, health: 2f, speed: 3f, acceleration: 15f, contactDamage: 1f, score: 25, dropChance: 0.15f));
+            var tankData = CreateOrLoad<EnemyData>(Root + "/Data/Enemies/Enemy_Tank.asset", d =>
+                SetEnemyStats(d, health: 12f, speed: 1.6f, acceleration: 6f, contactDamage: 2f, score: 50, dropChance: 0.5f));
+
+            CreateEnemyPrefab<Chaser>("Chaser", ChaserPrefabPath, chaserData, triangle, ChaserColor, 0.9f, 0.4f, 1f, layers);
+            // A Tank is just a Chaser with different data and a bigger body: no new code needed.
+            CreateEnemyPrefab<Chaser>("Tank", TankPrefabPath, tankData, square, TankColor, 1.4f, 0.7f, 4f, layers);
+            CreateEnemyPrefab<Shooter>("Shooter", ShooterPrefabPath, shooterData, circle, ShooterColor, 0.85f, 0.42f, 1f, layers, (shooter, visual) =>
+            {
+                Quad("Barrel", visual, new Vector2(0.45f, 0f), new Vector2(0.45f, 0.16f), square, Color.Lerp(ShooterColor, Color.white, 0.4f), 7);
+                var weapon = shooter.gameObject.AddComponent<Weapon>();
+                SetRef(weapon, "data", enemyBlaster);
+                SetRef(shooter, "weapon", weapon);
+            });
+            CreateWaves();
+
+            // Power-ups
+            var spreadUp = CreateOrLoad<WeaponPowerUp>(PowerUpPaths[0], p => SetPowerUp(p, "SPREAD", new Color(1f, 0.6f, 0.2f), 8f));
+            SetRef(spreadUp, "weapon", spread);
+            var rapidUp = CreateOrLoad<WeaponPowerUp>(PowerUpPaths[1], p => SetPowerUp(p, "RAPID", new Color(0.6f, 1f, 0.35f), 8f));
+            SetRef(rapidUp, "weapon", rapid);
+            CreateOrLoad<ShieldPowerUp>(PowerUpPaths[2], p => SetPowerUp(p, "SHIELD", new Color(0.4f, 0.75f, 1f), 6f));
+            CreatePickupPrefab(square, circle, layers.Pickup);
 
             BuildArenaScene(input, blaster, circle, square, layers);
 
@@ -81,15 +152,16 @@ namespace AS.EditorTools
 
         readonly struct LayerSet
         {
-            public readonly int Player, Enemy, PlayerShot, EnemyShot, Wall;
+            public readonly int Player, Enemy, PlayerShot, EnemyShot, Wall, Pickup;
 
-            public LayerSet(int player, int enemy, int playerShot, int enemyShot, int wall)
+            public LayerSet(int player, int enemy, int playerShot, int enemyShot, int wall, int pickup)
             {
                 Player = player;
                 Enemy = enemy;
                 PlayerShot = playerShot;
                 EnemyShot = enemyShot;
                 Wall = wall;
+                Pickup = pickup;
             }
         }
 
@@ -97,12 +169,13 @@ namespace AS.EditorTools
         {
             var layers = new LayerSet(
                 EnsureLayer(Layers.Player), EnsureLayer(Layers.Enemy),
-                EnsureLayer(Layers.PlayerShot), EnsureLayer(Layers.EnemyShot), EnsureLayer(Layers.Wall));
+                EnsureLayer(Layers.PlayerShot), EnsureLayer(Layers.EnemyShot), EnsureLayer(Layers.Wall),
+                EnsureLayer(Layers.Pickup));
 
             Physics2D.gravity = Vector2.zero;
 
             // Our layers only touch what they're meant to; everything else is ignored.
-            int[] ours = { layers.Player, layers.Enemy, layers.PlayerShot, layers.EnemyShot, layers.Wall };
+            int[] ours = { layers.Player, layers.Enemy, layers.PlayerShot, layers.EnemyShot, layers.Wall, layers.Pickup };
             foreach (int a in ours)
                 for (int b = 0; b < 32; b++)
                     Physics2D.IgnoreLayerCollision(a, b, true);
@@ -116,6 +189,7 @@ namespace AS.EditorTools
             Allow(layers.Enemy, layers.PlayerShot);
             Allow(layers.PlayerShot, layers.Wall);
             Allow(layers.EnemyShot, layers.Wall);
+            Allow(layers.Pickup, layers.Player);
 
             EditorUtility.SetDirty(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/Physics2DSettings.asset")[0]);
             return layers;
@@ -180,6 +254,35 @@ namespace AS.EditorTools
             return asset;
         }
 
+        /// <summary>Loads the asset at <paramref name="path"/>, or creates it and runs <paramref name="initialize"/> to set starting values.</summary>
+        static T CreateOrLoad<T>(string path, Action<T> initialize) where T : ScriptableObject
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<T>(path);
+            if (existing != null) return existing;
+
+            var asset = ScriptableObject.CreateInstance<T>();
+            AssetDatabase.CreateAsset(asset, path);
+            initialize(asset);
+            return asset;
+        }
+
+        static void SetEnemyStats(EnemyData data, float health, float speed, float acceleration, float contactDamage, int score, float dropChance)
+        {
+            SetFloat(data, "maxHealth", health);
+            SetFloat(data, "moveSpeed", speed);
+            SetFloat(data, "acceleration", acceleration);
+            SetFloat(data, "contactDamage", contactDamage);
+            SetInt(data, "scoreValue", score);
+            SetFloat(data, "dropChance", dropChance);
+        }
+
+        static void SetPowerUp(PowerUp powerUp, string label, Color color, float duration)
+        {
+            SetString(powerUp, "label", label);
+            SetColor(powerUp, "color", color);
+            SetFloat(powerUp, "duration", duration);
+        }
+
         static float CircleAlpha(int x, int y, int size)
         {
             float radius = size * 0.5f;
@@ -225,14 +328,14 @@ namespace AS.EditorTools
             return AssetDatabase.LoadAssetAtPath<Sprite>(path);
         }
 
-        static Projectile CreateBulletPrefab(Sprite circle, int layer)
+        static Projectile CreateBulletPrefab(string name, string path, Sprite circle, Color color, Vector2 size, int layer)
         {
-            var go = new GameObject("PlayerBullet") { layer = layer };
-            go.transform.localScale = new Vector3(0.4f, 0.22f, 1f);
+            var go = new GameObject(name) { layer = layer };
+            go.transform.localScale = new Vector3(size.x, size.y, 1f);
 
             var sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = circle;
-            sr.color = BulletColor;
+            sr.color = color;
             sr.sortingOrder = 5;
 
             var body = go.AddComponent<Rigidbody2D>();
@@ -242,35 +345,62 @@ namespace AS.EditorTools
             go.AddComponent<CircleCollider2D>().isTrigger = true;
             go.AddComponent<Projectile>();
 
-            var prefab = PrefabUtility.SaveAsPrefabAsset(go, Root + "/Prefabs/Projectiles/PlayerBullet.prefab");
+            var prefab = PrefabUtility.SaveAsPrefabAsset(go, path);
             Object.DestroyImmediate(go);
             return prefab.GetComponent<Projectile>();
         }
 
-        static void CreateChaserPrefab(EnemyData data, Sprite triangle, LayerSet layers)
+        /// <summary>
+        /// Builds an enemy prefab: physics body, Health, flash-on-hit visual and the enemy behaviour
+        /// <typeparamref name="T"/>. <paramref name="extra"/> adds anything type-specific (e.g. a gun).
+        /// </summary>
+        static void CreateEnemyPrefab<T>(string name, string path, EnemyData data, Sprite sprite, Color color,
+                                         float size, float radius, float mass, LayerSet layers,
+                                         Action<T, Transform> extra = null) where T : EnemyBase
         {
-            var go = new GameObject("Chaser") { layer = layers.Enemy };
+            var go = new GameObject(name) { layer = layers.Enemy };
 
             var body = go.AddComponent<Rigidbody2D>();
             body.gravityScale = 0f;
             body.freezeRotation = true;
             body.interpolation = RigidbodyInterpolation2D.Interpolate;
-            go.AddComponent<CircleCollider2D>().radius = 0.4f;
+            body.mass = mass;
+            go.AddComponent<CircleCollider2D>().radius = radius;
             var health = go.AddComponent<Health>();
 
-            var visual = Quad("Visual", go.transform, Vector2.zero, new Vector2(0.9f, 0.9f), triangle, ChaserColor, 8);
+            var visual = Quad("Visual", go.transform, Vector2.zero, new Vector2(size, size), sprite, color, 8);
             visual.layer = layers.Enemy;
 
             var flash = go.AddComponent<DamageFlash>();
             SetRef(flash, "health", health);
             SetRef(flash, "target", visual.GetComponent<SpriteRenderer>());
 
-            var chaser = go.AddComponent<Chaser>();
-            SetRef(chaser, "data", data);
-            SetRef(chaser, "visual", visual.transform);
-            SetInt(chaser, "contactTargets", 1 << layers.Player);
+            var enemy = go.AddComponent<T>();
+            SetRef(enemy, "data", data);
+            SetRef(enemy, "visual", visual.transform);
+            SetInt(enemy, "contactTargets", 1 << layers.Player);
+            extra?.Invoke(enemy, visual.transform);
 
-            PrefabUtility.SaveAsPrefabAsset(go, ChaserPrefabPath);
+            PrefabUtility.SaveAsPrefabAsset(go, path);
+            Object.DestroyImmediate(go);
+        }
+
+        static void CreatePickupPrefab(Sprite square, Sprite circle, int layer)
+        {
+            var go = new GameObject("Pickup") { layer = layer };
+            go.AddComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Kinematic;
+            var trigger = go.AddComponent<CircleCollider2D>();
+            trigger.isTrigger = true;
+            trigger.radius = 0.6f;
+
+            Quad("Glow", go.transform, Vector2.zero, new Vector2(1.3f, 1.3f), circle, new Color(1f, 1f, 1f, 0.15f), 5);
+            var visual = Quad("Visual", go.transform, Vector2.zero, new Vector2(0.6f, 0.6f), square, Color.white, 6);
+            visual.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+
+            var pickup = go.AddComponent<Pickup>();
+            SetRef(pickup, "spriteRenderer", visual.GetComponent<SpriteRenderer>());
+
+            PrefabUtility.SaveAsPrefabAsset(go, PickupPrefabPath);
             Object.DestroyImmediate(go);
         }
 
@@ -300,28 +430,37 @@ namespace AS.EditorTools
             SetRef(director, "spawner", spawner);
             SetList(director, "waves", waves);
 
+            var powerUps = new Object[PowerUpPaths.Length];
+            for (int i = 0; i < powerUps.Length; i++) powerUps[i] = AssetDatabase.LoadAssetAtPath<PowerUp>(PowerUpPaths[i]);
+            var dropper = new GameObject("PickupDropper").AddComponent<PickupDropper>();
+            SetRef(dropper, "pickupPrefab", AssetDatabase.LoadAssetAtPath<Pickup>(PickupPrefabPath));
+            SetList(dropper, "powerUps", powerUps);
+
             BuildUI(gameManager, square);
 
             EditorSceneManager.SaveScene(scene, ArenaScenePath);
         }
 
-        static void CreateWaves(Chaser chaser)
+        static void CreateWaves()
         {
             for (int i = 0; i < AuthoredWaves.Length; i++)
             {
-                string path = WavePath(i);
-                if (AssetDatabase.LoadAssetAtPath<WaveDefinition>(path) != null) continue;
-
-                var wave = ScriptableObject.CreateInstance<WaveDefinition>();
-                AssetDatabase.CreateAsset(wave, path);
-                SetFloat(wave, "spawnInterval", AuthoredWaves[i].interval);
-                int count = AuthoredWaves[i].count;
-                Modify(wave, "groups", p =>
+                var (interval, groups) = AuthoredWaves[i];
+                CreateOrLoad<WaveDefinition>(WavePath(i), wave =>
                 {
-                    p.arraySize = 1;
-                    var group = p.GetArrayElementAtIndex(0);
-                    group.FindPropertyRelative("enemy").objectReferenceValue = chaser;
-                    group.FindPropertyRelative("count").intValue = count;
+                    SetFloat(wave, "spawnInterval", interval);
+                    Modify(wave, "groups", p =>
+                    {
+                        p.arraySize = groups.Length;
+                        for (int g = 0; g < groups.Length; g++)
+                        {
+                            var group = p.GetArrayElementAtIndex(g);
+                            var enemy = AssetDatabase.LoadAssetAtPath<EnemyBase>(groups[g].enemy);
+                            if (enemy == null) Debug.LogError($"[SceneBuilder] No enemy prefab at {groups[g].enemy}.");
+                            group.FindPropertyRelative("enemy").objectReferenceValue = enemy;
+                            group.FindPropertyRelative("count").intValue = groups[g].count;
+                        }
+                    });
                 });
             }
         }
@@ -396,6 +535,13 @@ namespace AS.EditorTools
             SetRef(weapon, "data", weaponData);
             SetRef(weapon, "muzzle", muzzle);
 
+            var shield = Quad("Shield", player.transform, Vector2.zero, new Vector2(1.5f, 1.5f), circle, ShieldColor, 11);
+            shield.layer = layer;
+            var receiver = player.AddComponent<PowerUpReceiver>();
+            SetRef(receiver, "weapon", weapon);
+            SetRef(receiver, "health", health);
+            SetRef(receiver, "shieldVisual", shield);
+
             var aim = player.AddComponent<PlayerAim>();
             SetRef(aim, "input", input);
             SetRef(aim, "pivot", pivot);
@@ -461,6 +607,8 @@ namespace AS.EditorTools
             Stretch(fill.gameObject, 4f);
             fill.type = Image.Type.Filled;
             fill.fillMethod = Image.FillMethod.Horizontal;
+            var powerUpLine = UIText("PowerUps", hudGo.transform, "", 28, TextAnchor.UpperLeft);
+            Anchor(powerUpLine.rectTransform, new Vector2(0f, 1f), new Vector2(40f, -80f), new Vector2(700f, 40f));
 
             var score = UIText("Score", hudGo.transform, "SCORE 0", 40, TextAnchor.UpperRight);
             Anchor(score.rectTransform, new Vector2(1f, 1f), new Vector2(-40f, -30f), new Vector2(500f, 60f));
@@ -474,6 +622,7 @@ namespace AS.EditorTools
             SetRef(hud, "scoreText", score);
             SetRef(hud, "waveText", wave);
             SetRef(hud, "bannerText", banner);
+            SetRef(hud, "powerUpText", powerUpLine);
 
             // Pause menu
             var pause = Panel<PauseMenu>("PauseMenu", canvas, square, new Color(0f, 0f, 0f, 0.65f));
@@ -652,6 +801,7 @@ namespace AS.EditorTools
         static void SetFloat(Object target, string property, float value) => Modify(target, property, p => p.floatValue = value);
         static void SetInt(Object target, string property, int value) => Modify(target, property, p => p.intValue = value);
         static void SetColor(Object target, string property, Color value) => Modify(target, property, p => p.colorValue = value);
+        static void SetString(Object target, string property, string value) => Modify(target, property, p => p.stringValue = value);
 
         static void SetList(Object target, string property, Object[] values) => Modify(target, property, p =>
         {

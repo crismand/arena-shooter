@@ -44,18 +44,26 @@ namespace AS.Enemies
             _release = release;
             Health.ResetHealth(data.MaxHealth);
             Body.linearVelocity = Vector2.zero;
+            OnSpawned();
         }
 
         /// <summary>Velocity the enemy steers toward this physics step. Only called while it has a target.</summary>
         protected abstract Vector2 DesiredVelocity();
+
+        /// <summary>Hook for per-spawn setup in subclasses (timers, random choices). Runs at the end of <see cref="Init"/>.</summary>
+        protected virtual void OnSpawned() { }
+
+        /// <summary>Direction the visual should face. Defaults to the direction of travel.</summary>
+        protected virtual Vector2 FacingDirection(Vector2 desiredVelocity) => desiredVelocity;
 
         protected virtual void FixedUpdate()
         {
             Vector2 desired = HasTarget ? DesiredVelocity() : Vector2.zero;
             Body.linearVelocity = Vector2.MoveTowards(Body.linearVelocity, desired, data.Acceleration * Time.fixedDeltaTime);
 
-            if (visual != null && desired.sqrMagnitude > 0.01f)
-                visual.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(desired.y, desired.x) * Mathf.Rad2Deg);
+            Vector2 facing = FacingDirection(desired);
+            if (visual != null && facing.sqrMagnitude > 0.01f)
+                visual.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(facing.y, facing.x) * Mathf.Rad2Deg);
         }
 
         void OnCollisionStay2D(Collision2D collision)
@@ -67,7 +75,7 @@ namespace AS.Enemies
 
         void OnDied()
         {
-            EventBus.Publish(new EnemyKilled(data.ScoreValue, transform.position));
+            EventBus.Publish(new EnemyKilled(data.ScoreValue, transform.position, data.DropChance));
             if (_release != null) _release(this);
             else Destroy(gameObject);
         }

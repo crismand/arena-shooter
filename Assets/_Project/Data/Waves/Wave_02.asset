@@ -14,5 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: AS.Waves::AS.Waves.WaveDefinition
   groups:
   - enemy: {fileID: 922424436901389737, guid: 670fae371aa72bd489e94c1936b29e63, type: 3}
-    count: 10
-  spawnInterval: 0.8
+    count: 8
+  - enemy: {fileID: 5311321142569609594, guid: 787a47f0b3c6519448eb5eab29a82c15, type: 3}
+    count: 2
+  spawnInterval: 0.85
