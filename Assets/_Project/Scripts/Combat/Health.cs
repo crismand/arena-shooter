@@ -18,6 +18,7 @@ namespace AS.Combat
         public float Max => maxHealth;
         public float Current { get; private set; }
         public bool IsAlive => Current > 0f;
+        public bool IsInvulnerable => Time.time < _invulnerableUntil;
 
         public event Action<DamageInfo> Damaged;
         public event Action Died;
@@ -32,9 +33,13 @@ namespace AS.Combat
             _invulnerableUntil = 0f;
         }
 
+        /// <summary>Ignore all damage for <paramref name="seconds"/>. Never shortens a longer window already running.</summary>
+        public void GrantInvulnerability(float seconds) =>
+            _invulnerableUntil = Mathf.Max(_invulnerableUntil, Time.time + seconds);
+
         public void TakeDamage(in DamageInfo info)
         {
-            if (!IsAlive || info.Amount <= 0f || Time.time < _invulnerableUntil) return;
+            if (!IsAlive || info.Amount <= 0f || IsInvulnerable) return;
 
             Current = Mathf.Max(0f, Current - info.Amount);
             _invulnerableUntil = Time.time + invulnerabilityTime;

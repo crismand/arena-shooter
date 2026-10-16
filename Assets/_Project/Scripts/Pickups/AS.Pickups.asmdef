@@ -1,0 +1,14 @@
+{
+    "name": "AS.Pickups",
+    "rootNamespace": "AS.Pickups",
+    "references": ["AS.Core", "AS.Combat"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

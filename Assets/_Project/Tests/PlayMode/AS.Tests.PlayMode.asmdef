@@ -10,6 +10,7 @@
         "AS.Core",
         "AS.Combat",
         "AS.Enemies",
+        "AS.Pickups",
         "AS.Player",
         "AS.UI",
         "AS.Waves"

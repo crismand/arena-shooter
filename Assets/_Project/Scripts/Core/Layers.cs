@@ -8,5 +8,6 @@ namespace AS.Core
         public const string PlayerShot = "PlayerShot";
         public const string EnemyShot = "EnemyShot";
         public const string Wall = "Wall";
+        public const string Pickup = "Pickup";
     }
 }
