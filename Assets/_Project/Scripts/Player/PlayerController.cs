@@ -39,7 +39,8 @@ namespace AS.Player
 
         void Update()
         {
-            if (input.FireHeld || aim.IsStickAiming) weapon.TryFire(aim.Direction);
+            if ((input.FireHeld || aim.IsStickAiming) && weapon.TryFire(aim.Direction))
+                EventBus.Publish(new ShotFired(transform.position, byPlayer: true));
         }
 
         void FixedUpdate()
@@ -48,11 +49,15 @@ namespace AS.Player
             _body.linearVelocity = Vector2.MoveTowards(_body.linearVelocity, target, acceleration * Time.fixedDeltaTime);
         }
 
-        void OnDamaged(DamageInfo _) => PublishHealth();
+        void OnDamaged(DamageInfo _)
+        {
+            PublishHealth();
+            EventBus.Publish(new PlayerDamaged(transform.position));
+        }
 
         void OnDied()
         {
-            EventBus.Publish(new PlayerDied());
+            EventBus.Publish(new PlayerDied(transform.position));
             gameObject.SetActive(false);
         }
 

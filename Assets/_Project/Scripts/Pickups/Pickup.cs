@@ -1,4 +1,5 @@
 using System;
+using AS.Core;
 using UnityEngine;
 
 namespace AS.Pickups
@@ -49,6 +50,7 @@ namespace AS.Pickups
             if (_powerUp == null) return;
             var receiver = other.GetComponentInParent<PowerUpReceiver>();
             if (receiver == null) return;
+            EventBus.Publish(new PickupCollected(transform.position, _powerUp.Color));
             _powerUp.Apply(receiver);
             Despawn();
         }

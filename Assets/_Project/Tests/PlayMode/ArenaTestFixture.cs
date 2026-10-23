@@ -4,6 +4,7 @@ using AS.Core;
 using AS.Enemies;
 using AS.Player;
 using AS.Waves;
+using TMPro;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -15,13 +16,15 @@ namespace AS.Tests
     /// <summary>
     /// Shared setup for tests that play the real Arena scene: a simulated keyboard and mouse,
     /// handles to the main scene objects, and helpers. The wave director is switched off unless a
-    /// test asks for waves, so enemies only appear where the test puts them.
+    /// test asks for waves, so enemies only appear where the test puts them. High scores go to a
+    /// throwaway PlayerPrefs key, so tests never touch the real best score.
     /// </summary>
     public abstract class ArenaTestFixture : InputTestFixture
     {
         protected const string ChaserPrefabPath = "Assets/_Project/Prefabs/Enemies/Chaser.prefab";
         protected const string ShooterPrefabPath = "Assets/_Project/Prefabs/Enemies/Shooter.prefab";
         protected const string TankPrefabPath = "Assets/_Project/Prefabs/Enemies/Tank.prefab";
+        const string TestHighScoreKey = "AS.HighScore.Tests";
 
         protected Keyboard keyboard;
         protected Mouse mouse;
@@ -37,11 +40,15 @@ namespace AS.Tests
             keyboard = InputSystem.AddDevice<Keyboard>();
             mouse = InputSystem.AddDevice<Mouse>();
             chaserPrefab = LoadAsset<Chaser>(ChaserPrefabPath);
+            HighScoreStore.Key = TestHighScoreKey;
+            HighScoreStore.Clear();
         }
 
         public override void TearDown()
         {
             Time.timeScale = 1f;
+            HighScoreStore.Clear();
+            HighScoreStore.Key = HighScoreStore.DefaultKey;
             base.TearDown();
         }
 
@@ -72,7 +79,7 @@ namespace AS.Tests
         protected void AimAt(Vector3 world) => Set(mouse.position, (Vector2)Camera.main.WorldToScreenPoint(world));
 
         protected static T LoadAsset<T>(string path) where T : Object => AssetDatabase.LoadAssetAtPath<T>(path);
-        protected static Text FindText(string path) => GameObject.Find(path).GetComponent<Text>();
+        protected static TMP_Text FindText(string path) => GameObject.Find(path).GetComponent<TMP_Text>();
         protected static Image FindImage(string path) => GameObject.Find(path).GetComponent<Image>();
     }
 }

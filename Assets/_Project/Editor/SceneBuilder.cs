@@ -1,17 +1,22 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using AS.Combat;
 using AS.Core;
 using AS.Enemies;
+using AS.Feedback;
 using AS.Pickups;
 using AS.Player;
 using AS.UI;
 using AS.Waves;
+using TMPro;
 using Unity.Cinemachine;
 using UnityEditor;
 using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Audio;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
@@ -22,9 +27,10 @@ using Object = UnityEngine.Object;
 namespace AS.EditorTools
 {
     /// <summary>
-    /// Builds the Arena scene, placeholder sprites, prefabs, data assets, physics layers and the
-    /// extra input actions. Data assets are only created if missing, so tuning survives a rebuild;
-    /// the scene and prefabs are regenerated every run.
+    /// Builds the Arena scene, placeholder sprites and sounds, prefabs, data assets, the audio
+    /// mixer, physics layers and the extra input actions, and imports TextMesh Pro's essential
+    /// resources if they're missing. Data assets, sprites and sounds are only created if missing, so
+    /// tuning (or a real replacement file) survives a rebuild; the scene and prefabs are regenerated every run.
     /// Run from the menu (AS/Setup/Build Arena Scene) or headless:
     ///   -executeMethod AS.EditorTools.SceneBuilder.Run
     /// </summary>
@@ -39,6 +45,11 @@ namespace AS.EditorTools
         const string ShooterPrefabPath = Root + "/Prefabs/Enemies/Shooter.prefab";
         const string TankPrefabPath = Root + "/Prefabs/Enemies/Tank.prefab";
         const string PickupPrefabPath = Root + "/Prefabs/Pickups/Pickup.prefab";
+        const string TmpFontPath = "Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset";
+        const string MixerPath = Root + "/Audio/ArenaMixer.mixer";
+        const string MusicPath = Root + "/Audio/Music/ArenaLoop.wav";
+        static string SfxPath(string name) => $"{Root}/Audio/SFX/{name}.wav";
+        static string EffectPath(string name) => $"{Root}/Prefabs/Effects/{name}.prefab";
         static readonly string[] PowerUpPaths =
         {
             Root + "/Data/PowerUps/PowerUp_Spread.asset",
@@ -74,6 +85,8 @@ namespace AS.EditorTools
         [MenuItem("AS/Setup/Build Arena Scene")]
         public static void Run()
         {
+            EnsureFolders("Art/Materials", "Audio/SFX", "Audio/Music", "Prefabs/Effects");
+            EnsureTmpEssentials();
             var layers = ConfigurePhysics();
             AddInputActions();
 
@@ -141,7 +154,12 @@ namespace AS.EditorTools
             CreateOrLoad<ShieldPowerUp>(PowerUpPaths[2], p => SetPowerUp(p, "SHIELD", new Color(0.4f, 0.75f, 1f), 6f));
             CreatePickupPrefab(square, circle, layers.Pickup);
 
-            BuildArenaScene(input, blaster, circle, square, layers);
+            // Feedback
+            CreateEffectPrefabs(CreateParticleMaterial(circle));
+            CreateSounds();
+            CreateMixer();
+
+            BuildArenaScene(layers);
 
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ArenaScenePath, true) };
             AssetDatabase.SaveAssets();
@@ -238,6 +256,41 @@ namespace AS.EditorTools
             var action = map.AddAction(actionName, type, expectedControlLayout: layout);
             foreach (var (path, group) in bindings) action.AddBinding(path, groups: group);
             return true;
+        }
+
+        /// <summary>Creates folders under <see cref="Root"/> that assets are about to be saved into.</summary>
+        static void EnsureFolders(params string[] folders)
+        {
+            bool created = false;
+            foreach (string folder in folders)
+            {
+                string path = $"{Root}/{folder}";
+                if (Directory.Exists(path)) continue;
+                Directory.CreateDirectory(path);
+                created = true;
+            }
+            if (created) AssetDatabase.Refresh();
+        }
+
+        /// <summary>
+        /// TextMesh Pro ships its default font and settings as a package inside com.unity.ugui that
+        /// each project imports once (normally via a popup). Starts that import if it hasn't happened.
+        /// </summary>
+        static void EnsureTmpEssentials()
+        {
+            if (AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(TmpFontPath) != null) return;
+
+            var ugui = UnityEditor.PackageManager.PackageInfo.FindForAssetPath("Packages/com.unity.ugui");
+            string package = ugui != null ? Path.Combine(ugui.resolvedPath, "Package Resources", "TMP Essential Resources.unitypackage") : null;
+            if (package == null || !File.Exists(package))
+            {
+                Debug.LogError("[SceneBuilder] Couldn't find TMP Essential Resources in com.unity.ugui. Import them from Window > TextMeshPro.");
+                return;
+            }
+            // The import is queued and only lands after this method returns, so this run can't use it.
+            AssetDatabase.ImportPackage(package, false);
+            Debug.LogError("[SceneBuilder] TMP Essential Resources were missing and are being imported: run the builder again " +
+                           "once the import finishes. (Headless, pass -importPackage \"" + package + "\" in a run before this one.)");
         }
 
         // ------------------------------------------------------------------ assets
@@ -404,13 +457,162 @@ namespace AS.EditorTools
             Object.DestroyImmediate(go);
         }
 
+        // ------------------------------------------------------------------ feedback assets
+
+        /// <summary>Unlit, so bursts glow at full brightness whatever the 2D lighting does.</summary>
+        static Material CreateParticleMaterial(Sprite circle)
+        {
+            string path = Root + "/Art/Materials/Particle.mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(Shader.Find("Universal Render Pipeline/2D/Sprite-Unlit-Default"));
+                AssetDatabase.CreateAsset(material, path);
+            }
+            material.mainTexture = circle.texture;
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        static void CreateEffectPrefabs(Material material)
+        {
+            // (count, speed range, lifetime range, size range, colour). Enemy deaths and pickups are tinted at runtime.
+            CreateEffectPrefab("EnemyDeath", material, 22, new Vector2(3f, 9f), new Vector2(0.25f, 0.55f), new Vector2(0.12f, 0.32f), Color.white);
+            CreateEffectPrefab("Impact", material, 6, new Vector2(2f, 6f), new Vector2(0.08f, 0.18f), new Vector2(0.06f, 0.14f), new Color(1f, 0.92f, 0.6f));
+            CreateEffectPrefab("PlayerHit", material, 14, new Vector2(3f, 8f), new Vector2(0.2f, 0.4f), new Vector2(0.1f, 0.22f), new Color(1f, 0.3f, 0.3f));
+            CreateEffectPrefab("PlayerDeath", material, 60, new Vector2(2f, 13f), new Vector2(0.5f, 1.1f), new Vector2(0.12f, 0.4f), PlayerColor);
+            CreateEffectPrefab("PickupCollected", material, 16, new Vector2(1.5f, 4.5f), new Vector2(0.3f, 0.5f), new Vector2(0.1f, 0.2f), Color.white, shapeRadius: 0.5f);
+        }
+
+        /// <summary>A single burst of particles flying outward in the XY plane, slowing, shrinking and fading.</summary>
+        static void CreateEffectPrefab(string name, Material material, int count, Vector2 speed, Vector2 lifetime,
+                                       Vector2 size, Color color, float shapeRadius = 0.1f)
+        {
+            var go = new GameObject(name);
+            var particles = go.AddComponent<ParticleSystem>();
+            particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            var main = particles.main;
+            main.duration = lifetime.y;
+            main.loop = false;
+            main.playOnAwake = false;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(lifetime.x, lifetime.y);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(speed.x, speed.y);
+            main.startSize = new ParticleSystem.MinMaxCurve(size.x, size.y);
+            main.startColor = color;
+            main.maxParticles = count;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.stopAction = ParticleSystemStopAction.Callback;
+
+            var emission = particles.emission;
+            emission.rateOverTime = 0f;
+            emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)count) });
+
+            var shape = particles.shape;
+            shape.shapeType = ParticleSystemShapeType.Circle;
+            shape.radius = shapeRadius;
+            shape.radiusThickness = 1f;
+
+            // Dampen with no speed limit acts like drag: a fast pop that settles.
+            var drag = particles.limitVelocityOverLifetime;
+            drag.enabled = true;
+            drag.limit = 0f;
+            drag.dampen = 0.12f;
+
+            var shrink = particles.sizeOverLifetime;
+            shrink.enabled = true;
+            shrink.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 1f, 1f, 0f));
+
+            var fade = particles.colorOverLifetime;
+            fade.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 0.5f), new GradientAlphaKey(0f, 1f) });
+            fade.color = gradient;
+
+            var renderer = go.GetComponent<ParticleSystemRenderer>();
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.sharedMaterial = material;
+            renderer.sortingOrder = 15;
+
+            go.AddComponent<PooledEffect>();
+            PrefabUtility.SaveAsPrefabAsset(go, EffectPath(name));
+            Object.DestroyImmediate(go);
+        }
+
+        static void CreateSounds()
+        {
+            const PlaceholderAudio.Wave sine = PlaceholderAudio.Wave.Sine, square = PlaceholderAudio.Wave.Square;
+            const PlaceholderAudio.Wave saw = PlaceholderAudio.Wave.Saw, triangle = PlaceholderAudio.Wave.Triangle;
+
+            PlaceholderAudio.Ensure(SfxPath("PlayerShot"), false, () => PlaceholderAudio.Sweep(0.08f, 1400f, 500f, square, 5f, noise: 0.1f, gain: 0.25f));
+            PlaceholderAudio.Ensure(SfxPath("EnemyShot"), false, () => PlaceholderAudio.Sweep(0.14f, 700f, 250f, triangle, 4f, gain: 0.35f));
+            PlaceholderAudio.Ensure(SfxPath("EnemyHit"), false, () => PlaceholderAudio.Sweep(0.05f, 420f, 200f, square, 6f, noise: 0.3f, gain: 0.3f));
+            PlaceholderAudio.Ensure(SfxPath("EnemyDeath"), false, () => PlaceholderAudio.Sweep(0.35f, 220f, 40f, square, 5f, noise: 0.6f, gain: 0.45f));
+            PlaceholderAudio.Ensure(SfxPath("PlayerHurt"), false, () => PlaceholderAudio.Sweep(0.25f, 330f, 110f, saw, 3f, noise: 0.25f, gain: 0.45f));
+            PlaceholderAudio.Ensure(SfxPath("PlayerDeath"), false, () => PlaceholderAudio.Sweep(1f, 440f, 30f, saw, 3f, noise: 0.5f, gain: 0.5f));
+            PlaceholderAudio.Ensure(SfxPath("Pickup"), false, () => PlaceholderAudio.Notes(0.07f, square, 3f, 0.3f, 84, 88, 91, 96));
+            PlaceholderAudio.Ensure(SfxPath("WaveStarted"), false, () => PlaceholderAudio.Notes(0.12f, triangle, 2f, 0.4f, 69, 76));
+            PlaceholderAudio.Ensure(SfxPath("WaveCleared"), false, () => PlaceholderAudio.Notes(0.1f, sine, 2f, 0.45f, 72, 76, 79, 84));
+            PlaceholderAudio.Ensure(MusicPath, true, PlaceholderAudio.MusicLoop);
+        }
+
+        /// <summary>
+        /// Creates the mixer (Master with Music and SFX groups) if it's missing. Unity has no public
+        /// API for authoring mixers, so this calls the editor's internal one by reflection; if that
+        /// ever changes, it logs a warning and the game simply plays without a mixer.
+        /// </summary>
+        static void CreateMixer()
+        {
+            if (AssetDatabase.LoadAssetAtPath<AudioMixer>(MixerPath) != null) return;
+
+            var controllerType = AppDomain.CurrentDomain.GetAssemblies()
+                .Select(a => a.GetType("UnityEditor.Audio.AudioMixerController"))
+                .FirstOrDefault(t => t != null);
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+            MethodInfo Method(string name, int parameters) => controllerType?.GetMethods(flags)
+                .FirstOrDefault(m => m.Name == name && m.GetParameters().Length == parameters);
+
+            var create = Method("CreateMixerControllerAtPath", 1);
+            var createGroup = Method("CreateNewGroup", 2);
+            var addChild = Method("AddChildToParent", 2);
+            var master = controllerType?.GetProperty("masterGroup", flags);
+            if (create == null || createGroup == null || addChild == null || master == null)
+            {
+                Debug.LogWarning("[SceneBuilder] Couldn't find Unity's internal mixer API; skipping the audio mixer. Create " +
+                                 $"{MixerPath} with Music and SFX groups by hand and rerun to route audio through it.");
+                return;
+            }
+
+            var controller = create.Invoke(null, new object[] { MixerPath });
+            var masterGroup = master.GetValue(controller);
+            foreach (string groupName in new[] { "Music", "SFX" })
+            {
+                var group = createGroup.Invoke(controller, new object[] { groupName, false });
+                addChild.Invoke(controller, new[] { group, masterGroup });
+            }
+            EditorUtility.SetDirty((Object)controller);
+            AssetDatabase.SaveAssets();
+        }
+
+        static AudioMixerGroup MixerGroup(string groupName)
+        {
+            var mixer = AssetDatabase.LoadAssetAtPath<AudioMixer>(MixerPath);
+            return mixer != null ? mixer.FindMatchingGroups(groupName).FirstOrDefault() : null;
+        }
+
         // ------------------------------------------------------------------ scene
 
-        static void BuildArenaScene(InputReader input, WeaponData weapon, Sprite circle, Sprite square, LayerSet layers)
+        static void BuildArenaScene(LayerSet layers)
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            // NewScene unloads unreferenced assets, which invalidates handles taken before it:
-            // load prefabs and the wave list by path from here on.
+            // NewScene unloads unreferenced assets, which invalidates handles taken before it
+            // (saved assets go too, not just prefabs): load everything by path from here on.
+            var input = AssetDatabase.LoadAssetAtPath<InputReader>(Root + "/Data/Input/InputReader.asset");
+            var weapon = AssetDatabase.LoadAssetAtPath<WeaponData>(Root + "/Data/Weapons/Weapon_Blaster.asset");
+            var circle = AssetDatabase.LoadAssetAtPath<Sprite>(Root + "/Art/Sprites/Circle.png");
+            var square = AssetDatabase.LoadAssetAtPath<Sprite>(Root + "/Art/Sprites/Square.png");
             var waves = new Object[AuthoredWaves.Length];
             for (int i = 0; i < waves.Length; i++) waves[i] = AssetDatabase.LoadAssetAtPath<WaveDefinition>(WavePath(i));
 
@@ -436,9 +638,64 @@ namespace AS.EditorTools
             SetRef(dropper, "pickupPrefab", AssetDatabase.LoadAssetAtPath<Pickup>(PickupPrefabPath));
             SetList(dropper, "powerUps", powerUps);
 
+            BuildFeedback();
             BuildUI(gameManager, square);
 
             EditorSceneManager.SaveScene(scene, ArenaScenePath);
+        }
+
+        /// <summary>Screen shake, hit-stop, particles, sound effects and music: all driven by events.</summary>
+        static void BuildFeedback()
+        {
+            var feedback = new GameObject("Feedback");
+
+            var impulse = feedback.AddComponent<CinemachineImpulseSource>();
+            impulse.ImpulseDefinition.ImpulseType = CinemachineImpulseDefinition.ImpulseTypes.Uniform;
+            impulse.ImpulseDefinition.ImpulseShape = CinemachineImpulseDefinition.ImpulseShapes.Bump;
+            impulse.ImpulseDefinition.ImpulseDuration = 0.2f;
+            SetRef(feedback.AddComponent<ScreenShake>(), "source", impulse);
+            feedback.AddComponent<HitStop>();
+
+            var effects = feedback.AddComponent<ParticleEffects>();
+            foreach (var (field, prefab) in new[]
+                     {
+                         ("enemyDeath", "EnemyDeath"), ("impact", "Impact"), ("playerHit", "PlayerHit"),
+                         ("playerDeath", "PlayerDeath"), ("pickupCollected", "PickupCollected"),
+                     })
+                SetRef(effects, field, AssetDatabase.LoadAssetAtPath<PooledEffect>(EffectPath(prefab)));
+
+            var sfxGo = new GameObject("SoundEffects");
+            sfxGo.transform.SetParent(feedback.transform, false);
+            var sfx = sfxGo.AddComponent<SoundEffects>();
+            SetRef(sfx, "output", MixerGroup("SFX"));
+            // (cue field, clip, volume, pitch jitter, min interval)
+            SetCue(sfx, "playerShot", "PlayerShot", 0.5f, 0.06f, 0.05f);
+            SetCue(sfx, "enemyShot", "EnemyShot", 0.6f, 0.08f, 0.08f);
+            SetCue(sfx, "enemyHit", "EnemyHit", 0.55f, 0.1f, 0.04f);
+            SetCue(sfx, "enemyDeath", "EnemyDeath", 0.8f, 0.12f, 0.04f);
+            SetCue(sfx, "playerHurt", "PlayerHurt", 1f, 0.04f, 0.1f);
+            SetCue(sfx, "playerDeath", "PlayerDeath", 1f, 0f, 0.5f);
+            SetCue(sfx, "pickup", "Pickup", 0.8f, 0f, 0.05f);
+            SetCue(sfx, "waveStarted", "WaveStarted", 0.7f, 0f, 0.2f);
+            SetCue(sfx, "waveCleared", "WaveCleared", 0.7f, 0f, 0.2f);
+
+            var musicGo = new GameObject("Music");
+            musicGo.transform.SetParent(feedback.transform, false);
+            var source = musicGo.AddComponent<AudioSource>();
+            source.clip = AssetDatabase.LoadAssetAtPath<AudioClip>(MusicPath);
+            source.loop = true;
+            source.playOnAwake = false;
+            source.spatialBlend = 0f;
+            source.outputAudioMixerGroup = MixerGroup("Music");
+            musicGo.AddComponent<MusicPlayer>();
+        }
+
+        static void SetCue(SoundEffects sfx, string cue, string clip, float volume, float pitchJitter, float minInterval)
+        {
+            SetRef(sfx, cue + ".clip", AssetDatabase.LoadAssetAtPath<AudioClip>(SfxPath(clip)));
+            SetFloat(sfx, cue + ".volume", volume);
+            SetFloat(sfx, cue + ".pitchJitter", pitchJitter);
+            SetFloat(sfx, cue + ".minInterval", minInterval);
         }
 
         static void CreateWaves()
@@ -607,26 +864,30 @@ namespace AS.EditorTools
             Stretch(fill.gameObject, 4f);
             fill.type = Image.Type.Filled;
             fill.fillMethod = Image.FillMethod.Horizontal;
-            var powerUpLine = UIText("PowerUps", hudGo.transform, "", 28, TextAnchor.UpperLeft);
+            var powerUpLine = UIText("PowerUps", hudGo.transform, "", 28, TextAlignmentOptions.TopLeft);
             Anchor(powerUpLine.rectTransform, new Vector2(0f, 1f), new Vector2(40f, -80f), new Vector2(700f, 40f));
 
-            var score = UIText("Score", hudGo.transform, "SCORE 0", 40, TextAnchor.UpperRight);
+            var score = UIText("Score", hudGo.transform, "SCORE 0", 40, TextAlignmentOptions.TopRight);
             Anchor(score.rectTransform, new Vector2(1f, 1f), new Vector2(-40f, -30f), new Vector2(500f, 60f));
-            var wave = UIText("Wave", hudGo.transform, "", 36, TextAnchor.UpperCenter);
+            var best = UIText("Best", hudGo.transform, "BEST 0", 26, TextAlignmentOptions.TopRight);
+            best.color = new Color(PanelTextColor.r, PanelTextColor.g, PanelTextColor.b, 0.6f);
+            Anchor(best.rectTransform, new Vector2(1f, 1f), new Vector2(-40f, -82f), new Vector2(500f, 40f));
+            var wave = UIText("Wave", hudGo.transform, "", 36, TextAlignmentOptions.Top);
             Anchor(wave.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(400f, 60f));
-            var banner = UIText("Banner", hudGo.transform, "", 110, TextAnchor.MiddleCenter);
-            banner.fontStyle = FontStyle.Bold;
+            var banner = UIText("Banner", hudGo.transform, "", 110, TextAlignmentOptions.Center);
+            banner.fontStyle = FontStyles.Bold;
             Anchor(banner.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 200f), new Vector2(1400f, 200f));
 
             SetRef(hud, "healthFill", fill);
             SetRef(hud, "scoreText", score);
+            SetRef(hud, "bestText", best);
             SetRef(hud, "waveText", wave);
             SetRef(hud, "bannerText", banner);
             SetRef(hud, "powerUpText", powerUpLine);
 
             // Pause menu
             var pause = Panel<PauseMenu>("PauseMenu", canvas, square, new Color(0f, 0f, 0f, 0.65f));
-            Anchor(UIText("Title", pause.transform, "PAUSED", 96, TextAnchor.MiddleCenter).rectTransform,
+            Anchor(UIText("Title", pause.transform, "PAUSED", 96, TextAlignmentOptions.Center).rectTransform,
                 new Vector2(0.5f, 0.5f), new Vector2(0f, 160f), new Vector2(1000f, 140f));
             var resume = UIButton("Resume", pause.transform, square, new Vector2(0f, 10f));
             var pauseRestart = UIButton("Restart", pause.transform, square, new Vector2(0f, -80f));
@@ -636,13 +897,13 @@ namespace AS.EditorTools
 
             // Game over
             var gameOver = Panel<GameOverScreen>("GameOverScreen", canvas, square, new Color(0.08f, 0f, 0.02f, 0.78f));
-            var title = UIText("Title", gameOver.transform, "GAME OVER", 120, TextAnchor.MiddleCenter);
-            title.fontStyle = FontStyle.Bold;
+            var title = UIText("Title", gameOver.transform, "GAME OVER", 120, TextAlignmentOptions.Center);
+            title.fontStyle = FontStyles.Bold;
             title.color = new Color(1f, 0.4f, 0.42f);
             Anchor(title.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 200f), new Vector2(1200f, 160f));
-            var summary = UIText("Summary", gameOver.transform, "", 44, TextAnchor.MiddleCenter);
-            Anchor(summary.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(1000f, 140f));
-            var restart = UIButton("Restart", gameOver.transform, square, new Vector2(0f, -100f));
+            var summary = UIText("Summary", gameOver.transform, "", 44, TextAlignmentOptions.Center);
+            Anchor(summary.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(1000f, 180f));
+            var restart = UIButton("Restart", gameOver.transform, square, new Vector2(0f, -130f));
             UnityEventTools.AddPersistentListener(restart.onClick, gameManager.Restart);
             SetRef(gameOver, "summaryText", summary);
             SetRef(gameOver, "firstSelected", restart.gameObject);
@@ -679,16 +940,16 @@ namespace AS.EditorTools
             return image;
         }
 
-        static Text UIText(string name, Transform parent, string content, int size, TextAnchor alignment)
+        static TextMeshProUGUI UIText(string name, Transform parent, string content, int size, TextAlignmentOptions alignment)
         {
-            var text = UIElement(name, parent).AddComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var text = UIElement(name, parent).AddComponent<TextMeshProUGUI>();
+            text.font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(TmpFontPath);
             text.text = content;
             text.fontSize = size;
             text.alignment = alignment;
             text.color = PanelTextColor;
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.overflowMode = TextOverflowModes.Overflow;
             text.raycastTarget = false;
             return text;
         }
@@ -707,7 +968,7 @@ namespace AS.EditorTools
             colors.pressedColor = new Color(0.2f, 0.42f, 0.55f);
             button.colors = colors;
 
-            var text = UIText("Label", go.transform, label.ToUpperInvariant(), 34, TextAnchor.MiddleCenter);
+            var text = UIText("Label", go.transform, label.ToUpperInvariant(), 34, TextAlignmentOptions.Center);
             Stretch(text.gameObject);
             return button;
         }
@@ -753,6 +1014,8 @@ namespace AS.EditorTools
             composer.Damping = new Vector3(0.4f, 0.4f, 0f);
             composer.CameraDistance = 10f;
             vcamGo.AddComponent<CinemachineConfiner2D>().BoundingShape2D = bounds;
+            // Receives the ScreenShake impulses.
+            vcamGo.AddComponent<CinemachineImpulseListener>();
         }
 
         // ------------------------------------------------------------------ helpers

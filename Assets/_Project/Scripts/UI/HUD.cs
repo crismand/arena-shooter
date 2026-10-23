@@ -1,30 +1,34 @@
 using System.Collections.Generic;
 using System.Text;
 using AS.Core;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace AS.UI
 {
     /// <summary>
-    /// In-game overlay: health bar, active power-ups, score, wave number and a centre banner on
-    /// wave start/clear.
+    /// In-game overlay: health bar, active power-ups, score, best score, wave number and a centre
+    /// banner on wave start/clear. The best score climbs live once this run passes it.
     /// Listens to events only and never references gameplay objects.
     /// </summary>
     public class HUD : MonoBehaviour
     {
         [Tooltip("Image with Image Type = Filled.")]
         [SerializeField] Image healthFill;
-        [SerializeField] Text scoreText;
-        [SerializeField] Text waveText;
-        [SerializeField] Text bannerText;
+        [SerializeField] TMP_Text scoreText;
+        [SerializeField] TMP_Text bestText;
+        [SerializeField] TMP_Text waveText;
+        [SerializeField] TMP_Text bannerText;
         [Tooltip("Lists active power-ups with seconds remaining.")]
-        [SerializeField] Text powerUpText;
+        [SerializeField] TMP_Text powerUpText;
         [SerializeField, Min(0.1f)] float bannerDuration = 1.6f;
         [Tooltip("Seconds at the end of the banner's time spent fading out.")]
         [SerializeField, Min(0f)] float bannerFade = 0.4f;
 
         float _bannerEndTime;
+        int _score;
+        int _best;
         // Label → time it runs out. Re-collecting the same power-up just moves its end time.
         readonly Dictionary<string, float> _powerUpEnds = new();
         readonly List<string> _expired = new();
@@ -40,6 +44,7 @@ namespace AS.UI
         {
             EventBus.Subscribe<PlayerHealthChanged>(OnHealthChanged);
             EventBus.Subscribe<ScoreChanged>(OnScoreChanged);
+            EventBus.Subscribe<HighScoreChanged>(OnHighScoreChanged);
             EventBus.Subscribe<WaveStarted>(OnWaveStarted);
             EventBus.Subscribe<WaveCleared>(OnWaveCleared);
             EventBus.Subscribe<PowerUpActivated>(OnPowerUpActivated);
@@ -49,6 +54,7 @@ namespace AS.UI
         {
             EventBus.Unsubscribe<PlayerHealthChanged>(OnHealthChanged);
             EventBus.Unsubscribe<ScoreChanged>(OnScoreChanged);
+            EventBus.Unsubscribe<HighScoreChanged>(OnHighScoreChanged);
             EventBus.Unsubscribe<WaveStarted>(OnWaveStarted);
             EventBus.Unsubscribe<WaveCleared>(OnWaveCleared);
             EventBus.Unsubscribe<PowerUpActivated>(OnPowerUpActivated);
@@ -98,7 +104,20 @@ namespace AS.UI
         void OnHealthChanged(PlayerHealthChanged evt) =>
             healthFill.fillAmount = evt.Max > 0f ? evt.Current / evt.Max : 0f;
 
-        void OnScoreChanged(ScoreChanged evt) => scoreText.text = $"SCORE {evt.Score}";
+        void OnScoreChanged(ScoreChanged evt)
+        {
+            _score = evt.Score;
+            scoreText.text = $"SCORE {evt.Score}";
+            RefreshBest();
+        }
+
+        void OnHighScoreChanged(HighScoreChanged evt)
+        {
+            _best = evt.HighScore;
+            RefreshBest();
+        }
+
+        void RefreshBest() => bestText.text = $"BEST {Mathf.Max(_best, _score)}";
 
         void OnWaveStarted(WaveStarted evt)
         {

@@ -1,4 +1,5 @@
 using System;
+using AS.Core;
 using UnityEngine;
 
 namespace AS.Combat
@@ -6,7 +7,7 @@ namespace AS.Combat
     /// <summary>
     /// A pooled bullet. Moves at constant velocity, damages the first <see cref="IDamageable"/> it
     /// touches and despawns on any hit or when its lifetime runs out. What it can touch is decided
-    /// by its physics layer (PlayerShot / EnemyShot).
+    /// by its physics layer (PlayerShot / EnemyShot). Announces each hit as a <see cref="ProjectileImpact"/>.
     /// </summary>
     [RequireComponent(typeof(Rigidbody2D))]
     public class Projectile : MonoBehaviour
@@ -39,6 +40,7 @@ namespace AS.Combat
         {
             if (!_live) return;
             other.GetComponentInParent<IDamageable>()?.TakeDamage(_damage);
+            EventBus.Publish(new ProjectileImpact(transform.position));
             Despawn();
         }
 
