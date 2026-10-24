@@ -1002,6 +1002,8 @@ namespace AS.EditorTools
             camera.backgroundColor = new Color(0.04f, 0.04f, 0.06f);
             cameraGo.transform.position = new Vector3(0f, 0f, -10f);
             cameraGo.AddComponent<CinemachineBrain>();
+            // The camera is built from scratch, so it doesn't get the listener a default scene camera has.
+            cameraGo.AddComponent<AudioListener>();
 
             var vcamGo = new GameObject("CM Camera");
             vcamGo.transform.position = new Vector3(0f, 0f, -10f);

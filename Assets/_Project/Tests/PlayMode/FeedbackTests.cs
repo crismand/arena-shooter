@@ -78,6 +78,16 @@ namespace AS.Tests
         }
 
         [UnityTest]
+        public IEnumerator Scene_HasExactlyOneAudioListener_OnTheMainCamera()
+        {
+            yield return LoadArenaWithFeedback();
+
+            var listeners = Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None);
+            Assert.AreEqual(1, listeners.Length, "Without a listener nothing is audible; with two Unity warns every frame.");
+            Assert.AreSame(Camera.main.gameObject, listeners[0].gameObject);
+        }
+
+        [UnityTest]
         public IEnumerator Firing_PlaysShotSound()
         {
             yield return LoadArenaWithFeedback();
