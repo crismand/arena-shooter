@@ -7,8 +7,8 @@ namespace AS.Enemies
 {
     /// <summary>
     /// Shared enemy behaviour: steering toward a desired velocity, facing its movement, damaging
-    /// whatever it touches on <see cref="contactTargets"/>, and announcing its death
-    /// (<see cref="EnemyKilled"/>) before returning to its pool.
+    /// whatever it touches on <see cref="contactTargets"/>, and announcing hits and its death
+    /// (<see cref="EnemyDamaged"/>, <see cref="EnemyKilled"/>) before returning to its pool.
     /// Subclasses only decide where they want to go.
     /// </summary>
     [RequireComponent(typeof(Rigidbody2D), typeof(Health))]
@@ -21,6 +21,8 @@ namespace AS.Enemies
         [SerializeField] LayerMask contactTargets;
 
         Action<EnemyBase> _release;
+        // Read once: by the time it dies the damage flash may have tinted the sprite.
+        Color _color;
 
         public EnemyData Data => data;
         public Health Health { get; private set; }
@@ -32,10 +34,21 @@ namespace AS.Enemies
         {
             Body = GetComponent<Rigidbody2D>();
             Health = GetComponent<Health>();
+            var sprite = visual != null ? visual.GetComponent<SpriteRenderer>() : null;
+            _color = sprite != null ? sprite.color : Color.white;
         }
 
-        void OnEnable() => Health.Died += OnDied;
-        void OnDisable() => Health.Died -= OnDied;
+        void OnEnable()
+        {
+            Health.Damaged += OnDamaged;
+            Health.Died += OnDied;
+        }
+
+        void OnDisable()
+        {
+            Health.Damaged -= OnDamaged;
+            Health.Died -= OnDied;
+        }
 
         /// <summary>Called by the spawner each time this enemy is taken from the pool.</summary>
         public void Init(Transform target, Action<EnemyBase> release)
@@ -73,9 +86,11 @@ namespace AS.Enemies
             collision.collider.GetComponentInParent<IDamageable>()?.TakeDamage(new DamageInfo(data.ContactDamage, direction, gameObject));
         }
 
+        void OnDamaged(DamageInfo _) => EventBus.Publish(new EnemyDamaged(transform.position));
+
         void OnDied()
         {
-            EventBus.Publish(new EnemyKilled(data.ScoreValue, transform.position, data.DropChance));
+            EventBus.Publish(new EnemyKilled(data.ScoreValue, transform.position, data.DropChance, _color));
             if (_release != null) _release(this);
             else Destroy(gameObject);
         }

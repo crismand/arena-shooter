@@ -1,7 +1,7 @@
 {
     "name": "AS.UI",
     "rootNamespace": "AS.UI",
-    "references": ["AS.Core", "UnityEngine.UI"],
+    "references": ["AS.Core", "UnityEngine.UI", "Unity.TextMeshPro"],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

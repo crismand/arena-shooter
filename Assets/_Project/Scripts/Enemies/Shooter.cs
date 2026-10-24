@@ -1,4 +1,5 @@
 using AS.Combat;
+using AS.Core;
 using UnityEngine;
 
 namespace AS.Enemies
@@ -48,7 +49,8 @@ namespace AS.Enemies
         {
             if (!HasTarget || Time.time < _canFireAt) return;
             Vector2 toTarget = ToTarget;
-            if (toTarget.sqrMagnitude <= fireRange * fireRange) weapon.TryFire(toTarget);
+            if (toTarget.sqrMagnitude <= fireRange * fireRange && weapon.TryFire(toTarget))
+                EventBus.Publish(new ShotFired(transform.position, byPlayer: false));
         }
     }
 }
