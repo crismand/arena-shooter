@@ -1,0 +1,23 @@
+{
+    "name": "AS.Tests.EditMode",
+    "rootNamespace": "AS.Tests",
+    "references": [
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "AS.Core",
+        "AS.Combat",
+        "AS.Enemies",
+        "AS.Feedback",
+        "AS.Pickups",
+        "AS.Waves"
+    ],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": ["nunit.framework.dll"],
+    "autoReferenced": false,
+    "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
