@@ -20,6 +20,9 @@ namespace AS.Player
         [SerializeField, Min(0f)] float acceleration = 70f;
 
         Rigidbody2D _body;
+        // Read in Update, used in FixedUpdate. Reading input inside FixedUpdate isn't reliable: on
+        // the Linux editor (CI) a WASD composite read there came back zero while Update saw it held.
+        Vector2 _moveInput;
 
         void Awake() => _body = GetComponent<Rigidbody2D>();
 
@@ -39,13 +42,14 @@ namespace AS.Player
 
         void Update()
         {
+            _moveInput = Vector2.ClampMagnitude(input.Move, 1f);
             if ((input.FireHeld || aim.IsStickAiming) && weapon.TryFire(aim.Direction))
                 EventBus.Publish(new ShotFired(transform.position, byPlayer: true));
         }
 
         void FixedUpdate()
         {
-            Vector2 target = Vector2.ClampMagnitude(input.Move, 1f) * moveSpeed;
+            Vector2 target = _moveInput * moveSpeed;
             _body.linearVelocity = Vector2.MoveTowards(_body.linearVelocity, target, acceleration * Time.fixedDeltaTime);
         }
 
