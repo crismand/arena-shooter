@@ -905,6 +905,8 @@ namespace AS.EditorTools
             Anchor(summary.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(1000f, 180f));
             var restart = UIButton("Restart", gameOver.transform, square, new Vector2(0f, -130f));
             UnityEventTools.AddPersistentListener(restart.onClick, gameManager.Restart);
+            var quit = UIButton("Quit", gameOver.transform, square, new Vector2(0f, -220f));
+            UnityEventTools.AddPersistentListener(quit.onClick, gameManager.Quit);
             SetRef(gameOver, "summaryText", summary);
             SetRef(gameOver, "firstSelected", restart.gameObject);
         }
