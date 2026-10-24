@@ -157,7 +157,7 @@ namespace AS.Tests
             Assert.IsTrue(screen.IsVisible);
             Assert.IsFalse(director.enabled, "Waves should stop on game over.");
 
-            screen.GetComponentInChildren<Button>().onClick.Invoke();
+            screen.transform.Find("RestartButton").GetComponent<Button>().onClick.Invoke();
             yield return null;
             yield return null;
             FindSceneObjects();
@@ -174,6 +174,25 @@ namespace AS.Tests
             yield return new WaitForSeconds(0.3f);
             Release(keyboard.dKey);
             Assert.Greater(player.transform.position.x, startX + 0.5f, "Player can't move after restart.");
+        }
+
+        [UnityTest]
+        public IEnumerator GameOverScreen_HasAQuitButton_WiredToGameManagerQuit()
+        {
+            yield return LoadArena();
+            player.GetComponent<Health>().TakeDamage(new DamageInfo(100f, Vector2.zero, null));
+            yield return null;
+
+            var screen = Object.FindAnyObjectByType<GameOverScreen>();
+            Assert.IsTrue(screen.IsVisible);
+            var quit = screen.transform.Find("QuitButton")?.GetComponent<Button>();
+            Assert.IsNotNull(quit, "No Quit button on the game over screen.");
+            Assert.IsTrue(quit.interactable);
+
+            // Pressing it would stop Play mode and end the test run, so check the wiring instead.
+            Assert.AreEqual(1, quit.onClick.GetPersistentEventCount());
+            Assert.AreSame(game, quit.onClick.GetPersistentTarget(0));
+            Assert.AreEqual(nameof(GameManager.Quit), quit.onClick.GetPersistentMethodName(0));
         }
     }
 }

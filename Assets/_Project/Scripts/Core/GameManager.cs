@@ -65,6 +65,16 @@ namespace AS.Core
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
 
+        /// <summary>Closes the game. In the editor, where Application.Quit does nothing, it leaves Play mode instead.</summary>
+        public void Quit()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
+        }
+
         void OnPlayerDied(PlayerDied _)
         {
             input.GameplayEnabled = false;
