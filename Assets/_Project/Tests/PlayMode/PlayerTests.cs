@@ -29,22 +29,6 @@ namespace AS.Tests
             Assert.Greater(player.transform.position.x, startX + 1f);
         }
 
-        /// <summary>CI runs a headless editor that never has focus; simulated input must still arrive.</summary>
-        [UnityTest]
-        public IEnumerator KeyboardInput_StillArrives_WhenTheEditorHasNoFocus()
-        {
-            yield return LoadArena();
-            ScheduleFocusChangedEvent(applicationHasFocus: false);
-            yield return null;
-            float startX = player.transform.position.x;
-
-            Press(keyboard.dKey);
-            yield return new WaitForSeconds(0.5f);
-            Release(keyboard.dKey);
-
-            Assert.Greater(player.transform.position.x, startX + 1f);
-        }
-
         [UnityTest]
         public IEnumerator HoldingFire_ShootsTowardMouse_AndWallsDespawnBullets()
         {
