@@ -36,4 +36,4 @@ Nothing below is committed to yet. These are candidates, roughly in the order th
 
 ### Reach and tooling
 - [ ] WebGL build that runs in a browser (for example on itch.io).
-- [ ] GitHub Actions that run the EditMode and PlayMode tests on every push, and attach a Windows build to tagged releases.
+- [x] GitHub Actions that run the EditMode and PlayMode tests on pushes to `dev` and pull requests into `main`, and attach a Windows build to tagged releases.
