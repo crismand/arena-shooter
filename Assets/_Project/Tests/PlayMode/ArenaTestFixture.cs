@@ -37,6 +37,12 @@ namespace AS.Tests
         public override void Setup()
         {
             base.Setup();
+            // InputTestFixture turns on the Input System's internal read-value caching and its
+            // "paranoid" self-check, meant for testing the package itself. The check logs an error
+            // whenever a cached key value goes stale, which happens intermittently (reliably on CI)
+            // and fails the test. The game runs with both off, so test with them off too.
+            InputSystem.settings.SetInternalFeatureFlag("PARANOID_READ_VALUE_CACHING_CHECKS", false);
+            InputSystem.settings.SetInternalFeatureFlag("USE_READ_VALUE_CACHING", false);
             keyboard = InputSystem.AddDevice<Keyboard>();
             mouse = InputSystem.AddDevice<Mouse>();
             chaserPrefab = LoadAsset<Chaser>(ChaserPrefabPath);
