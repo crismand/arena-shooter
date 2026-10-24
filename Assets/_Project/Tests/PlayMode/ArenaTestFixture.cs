@@ -43,6 +43,12 @@ namespace AS.Tests
             // and fails the test. The game runs with both off, so test with them off too.
             InputSystem.settings.SetInternalFeatureFlag("PARANOID_READ_VALUE_CACHING_CHECKS", false);
             InputSystem.settings.SetInternalFeatureFlag("USE_READ_VALUE_CACHING", false);
+            // A headless editor (CI) doesn't count as focused, and by default keyboard input is held
+            // back in Play mode without focus, so simulated key presses never arrived. Tests are about
+            // the game, not focus handling: deliver all input regardless. (These are the fixture's
+            // temporary settings, restored after each test; the project's settings are untouched.)
+            InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
             keyboard = InputSystem.AddDevice<Keyboard>();
             mouse = InputSystem.AddDevice<Mouse>();
             chaserPrefab = LoadAsset<Chaser>(ChaserPrefabPath);
