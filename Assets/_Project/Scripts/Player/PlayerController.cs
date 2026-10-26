@@ -5,13 +5,12 @@ using UnityEngine;
 namespace AS.Player
 {
     /// <summary>
-    /// Eight-way movement plus firing while the trigger is held or the aim stick is pushed.
+    /// Eight-way movement plus firing, driven by an <see cref="IPlayerInput"/>.
     /// Reports its health on the event bus and leaves play when it runs out.
     /// </summary>
     [RequireComponent(typeof(Rigidbody2D))]
     public class PlayerController : MonoBehaviour
     {
-        [SerializeField] InputReader input;
         [SerializeField] PlayerAim aim;
         [SerializeField] Weapon weapon;
         [SerializeField] Health health;
@@ -24,7 +23,14 @@ namespace AS.Player
         // the Linux editor (CI) a WASD composite read there came back zero while Update saw it held.
         Vector2 _moveInput;
 
-        void Awake() => _body = GetComponent<Rigidbody2D>();
+        /// <summary>Defaults to the <see cref="IPlayerInput"/> on this object; set it to hand control elsewhere.</summary>
+        public IPlayerInput InputSource { get; set; }
+
+        void Awake()
+        {
+            _body = GetComponent<Rigidbody2D>();
+            if (InputSource == null) InputSource = GetComponent<IPlayerInput>();
+        }
 
         void OnEnable()
         {
@@ -42,8 +48,9 @@ namespace AS.Player
 
         void Update()
         {
-            _moveInput = Vector2.ClampMagnitude(input.Move, 1f);
-            if ((input.FireHeld || aim.IsStickAiming) && weapon.TryFire(aim.Direction))
+            if (InputSource == null) return;
+            _moveInput = Vector2.ClampMagnitude(InputSource.Move, 1f);
+            if (InputSource.FireHeld && weapon.TryFire(aim.Direction))
                 EventBus.Publish(new ShotFired(transform.position, byPlayer: true));
         }
 

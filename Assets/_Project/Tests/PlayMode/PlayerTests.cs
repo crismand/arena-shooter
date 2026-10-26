@@ -3,6 +3,7 @@ using System.Collections;
 using AS.Combat;
 using AS.Core;
 using AS.Enemies;
+using AS.Player;
 using AS.UI;
 using NUnit.Framework;
 using UnityEngine;
@@ -48,6 +49,38 @@ namespace AS.Tests
             // Shorter than the blaster's 1.5 s lifetime, so only a wall hit can have removed them.
             yield return new WaitForSeconds(1.2f);
             Assert.AreEqual(0, Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None).Length);
+        }
+
+        [UnityTest]
+        public IEnumerator ScriptedInputSource_MovesAimsAndFires_WithoutDevices()
+        {
+            yield return LoadArena();
+            var scripted = new ScriptedInput { Move = Vector2.left, Aim = Vector2.up, FireHeld = true };
+            player.InputSource = scripted;
+            player.GetComponent<PlayerAim>().InputSource = scripted;
+            float startX = player.transform.position.x;
+
+            yield return new WaitForSeconds(0.3f);
+
+            Assert.Less(player.transform.position.x, startX - 0.5f, "Player didn't follow the scripted move.");
+            var bullets = Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None);
+            Assert.Greater(bullets.Length, 0, "No projectiles while the scripted source holds fire.");
+            foreach (var bullet in bullets)
+                Assert.Greater(bullet.GetComponent<Rigidbody2D>().linearVelocity.y, 10f, "Projectile not travelling along the scripted aim.");
+        }
+
+        /// <summary>Stands in for an agent: fixed commands, no Input System devices involved.</summary>
+        class ScriptedInput : IPlayerInput
+        {
+            public Vector2 Move { get; set; }
+            public bool FireHeld { get; set; }
+            public Vector2 Aim { get; set; }
+
+            public bool TryGetAim(out Vector2 direction)
+            {
+                direction = Aim;
+                return true;
+            }
         }
 
         // ------------------------------------------------------------------ enemies and score
