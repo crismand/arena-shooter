@@ -799,12 +799,13 @@ namespace AS.EditorTools
             SetRef(receiver, "health", health);
             SetRef(receiver, "shieldVisual", shield);
 
+            var humanInput = player.AddComponent<HumanPlayerInput>();
+            SetRef(humanInput, "input", input);
+
             var aim = player.AddComponent<PlayerAim>();
-            SetRef(aim, "input", input);
             SetRef(aim, "pivot", pivot);
 
             var controller = player.AddComponent<PlayerController>();
-            SetRef(controller, "input", input);
             SetRef(controller, "aim", aim);
             SetRef(controller, "weapon", weapon);
             SetRef(controller, "health", health);
