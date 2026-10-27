@@ -561,7 +561,10 @@ namespace AS.EditorTools
         /// <summary>
         /// Creates the mixer (Master with Music and SFX groups) if it's missing. Unity has no public
         /// API for authoring mixers, so this calls the editor's internal one by reflection; if that
-        /// ever changes, it logs a warning and the game simply plays without a mixer.
+        /// ever changes, it logs a warning and the game simply plays without a mixer. The settings menu
+        /// needs each group's Volume exposed as MusicVolume and SfxVolume. The committed mixer has
+        /// them; a newly created one needs them exposed by hand (right-click Volume in the group's
+        /// inspector).
         /// </summary>
         static void CreateMixer()
         {
@@ -895,14 +898,38 @@ namespace AS.EditorTools
             SetRef(hud, "bannerText", banner);
             SetRef(hud, "powerUpText", powerUpLine);
 
+            // Settings, built first so the menus below can open it; moved last at the end so it draws on top.
+            var settings = BuildSettingsMenu(canvas, square);
+
+            // Title screen
+            var titleScreen = Panel<TitleScreen>("TitleScreen", canvas, square, new Color(0.03f, 0.04f, 0.07f, 0.9f));
+            var gameTitle = UIText("Title", titleScreen.transform, "ARENA SHOOTER", 130, TextAlignmentOptions.Center);
+            gameTitle.fontStyle = FontStyles.Bold;
+            gameTitle.color = PlayerColor;
+            Anchor(gameTitle.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 230f), new Vector2(1400f, 170f));
+            var titleBest = UIText("Best", titleScreen.transform, "", 40, TextAlignmentOptions.Center);
+            Anchor(titleBest.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 110f), new Vector2(800f, 60f));
+            var play = UIButton("Play", titleScreen.transform, square, new Vector2(0f, -10f));
+            var titleSettings = UIButton("Settings", titleScreen.transform, square, new Vector2(0f, -100f));
+            var titleQuit = UIButton("Quit", titleScreen.transform, square, new Vector2(0f, -190f));
+            UnityEventTools.AddPersistentListener(play.onClick, gameManager.Play);
+            UnityEventTools.AddObjectPersistentListener<UIPanel>(titleSettings.onClick, settings.Open, titleScreen);
+            UnityEventTools.AddPersistentListener(titleQuit.onClick, gameManager.Quit);
+            SetRef(titleScreen, "bestText", titleBest);
+            SetRef(titleScreen, "firstSelected", play.gameObject);
+
             // Pause menu
             var pause = Panel<PauseMenu>("PauseMenu", canvas, square, new Color(0f, 0f, 0f, 0.65f));
             Anchor(UIText("Title", pause.transform, "PAUSED", 96, TextAlignmentOptions.Center).rectTransform,
-                new Vector2(0.5f, 0.5f), new Vector2(0f, 160f), new Vector2(1000f, 140f));
-            var resume = UIButton("Resume", pause.transform, square, new Vector2(0f, 10f));
-            var pauseRestart = UIButton("Restart", pause.transform, square, new Vector2(0f, -80f));
+                new Vector2(0.5f, 0.5f), new Vector2(0f, 200f), new Vector2(1000f, 140f));
+            var resume = UIButton("Resume", pause.transform, square, new Vector2(0f, 40f));
+            var pauseRestart = UIButton("Restart", pause.transform, square, new Vector2(0f, -50f));
+            var pauseSettings = UIButton("Settings", pause.transform, square, new Vector2(0f, -140f));
+            var pauseQuit = UIButton("Quit", pause.transform, square, new Vector2(0f, -230f));
             UnityEventTools.AddPersistentListener(resume.onClick, gameManager.Resume);
             UnityEventTools.AddPersistentListener(pauseRestart.onClick, gameManager.Restart);
+            UnityEventTools.AddObjectPersistentListener<UIPanel>(pauseSettings.onClick, settings.Open, pause);
+            UnityEventTools.AddPersistentListener(pauseQuit.onClick, gameManager.Quit);
             SetRef(pause, "firstSelected", resume.gameObject);
 
             // Game over
@@ -919,6 +946,67 @@ namespace AS.EditorTools
             UnityEventTools.AddPersistentListener(quit.onClick, gameManager.Quit);
             SetRef(gameOver, "summaryText", summary);
             SetRef(gameOver, "firstSelected", restart.gameObject);
+
+            settings.transform.SetAsLastSibling();
+        }
+
+        static SettingsMenu BuildSettingsMenu(Transform canvas, Sprite square)
+        {
+            var settings = Panel<SettingsMenu>("SettingsMenu", canvas, square, new Color(0.03f, 0.04f, 0.07f, 0.92f));
+            Anchor(UIText("Title", settings.transform, "SETTINGS", 96, TextAlignmentOptions.Center).rectTransform,
+                new Vector2(0.5f, 0.5f), new Vector2(0f, 220f), new Vector2(1000f, 140f));
+            var music = UISliderRow("Music", settings.transform, square, 80f);
+            var sfx = UISliderRow("Effects", settings.transform, square, 0f);
+            var fullscreen = UIButton("Fullscreen", settings.transform, square, new Vector2(0f, -100f));
+            fullscreen.GetComponent<RectTransform>().sizeDelta = new Vector2(460f, 70f);
+            var back = UIButton("Back", settings.transform, square, new Vector2(0f, -200f));
+            UnityEventTools.AddPersistentListener(fullscreen.onClick, settings.ToggleFullscreen);
+            UnityEventTools.AddPersistentListener(back.onClick, settings.Back);
+            SetRef(settings, "mixer", AssetDatabase.LoadAssetAtPath<AudioMixer>(MixerPath));
+            SetRef(settings, "musicSlider", music);
+            SetRef(settings, "sfxSlider", sfx);
+            SetRef(settings, "fullscreenLabel", fullscreen.GetComponentInChildren<TMP_Text>());
+            SetRef(settings, "firstSelected", music.gameObject);
+            return settings;
+        }
+
+        /// <summary>A label and a 0 to 1 slider side by side at height <paramref name="y"/>.</summary>
+        static Slider UISliderRow(string label, Transform parent, Sprite square, float y)
+        {
+            var text = UIText(label + "Label", parent, label.ToUpperInvariant(), 34, TextAlignmentOptions.Right);
+            Anchor(text.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(-150f, y), new Vector2(260f, 60f));
+            text.rectTransform.pivot = new Vector2(1f, 0.5f);
+
+            var go = UIElement(label + "Slider", parent);
+            var rt = go.GetComponent<RectTransform>();
+            Anchor(rt, new Vector2(0.5f, 0.5f), new Vector2(-110f, y), new Vector2(400f, 28f));
+            rt.pivot = new Vector2(0f, 0.5f);
+
+            var background = UIImage("Background", go.transform, square, new Color(0.2f, 0.24f, 0.32f));
+            background.raycastTarget = true;
+            Stretch(background.gameObject);
+            var fillArea = UIElement("Fill Area", go.transform);
+            Stretch(fillArea);
+            var fill = UIImage("Fill", fillArea.transform, square, new Color(0.3f, 0.55f, 0.7f));
+            fill.rectTransform.sizeDelta = Vector2.zero;
+            var handleArea = UIElement("Handle Slide Area", go.transform);
+            Stretch(handleArea);
+            var handle = UIImage("Handle", handleArea.transform, square, PanelTextColor);
+            handle.rectTransform.sizeDelta = new Vector2(24f, 20f);
+            handle.raycastTarget = true;
+
+            var slider = go.AddComponent<Slider>();
+            slider.fillRect = fill.rectTransform;
+            slider.handleRect = handle.rectTransform;
+            slider.targetGraphic = handle;
+            slider.direction = Slider.Direction.LeftToRight;
+            slider.minValue = 0f;
+            slider.maxValue = 1f;
+            slider.value = 1f;
+            var colors = slider.colors;
+            colors.highlightedColor = colors.selectedColor = new Color(0.55f, 0.85f, 1f);
+            slider.colors = colors;
+            return slider;
         }
 
         /// <summary>Full-screen panel with a dimming background, hidden in the editor so the scene stays readable.</summary>
