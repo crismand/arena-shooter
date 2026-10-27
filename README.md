@@ -25,7 +25,8 @@ Download the latest Windows build from [Releases](https://github.com/crismand/ar
 - **Waves.** Four hand-designed waves, then endless waves that keep getting bigger and faster.
 - **Power-ups.** Enemies sometimes drop Spread shot, Rapid fire or a Shield.
 - **Game feel.** Screen shake, hit-stop, particle bursts, sound effects and music.
-- **High score.** Saved between sessions, shown on the HUD and the game over screen.
+- **High score.** Saved between sessions, shown on the title screen, the HUD and the game over screen.
+- **Menus.** A title screen, instant restarts, and settings for music and effects volume and fullscreen.
 
 ![Game over screen with score, wave reached, best score, and Restart and Quit buttons](media/game-over.png)
 
@@ -51,7 +52,7 @@ The scene, prefabs, placeholder sprites and sounds, audio mixer and physics laye
 
 The tests live in `Assets/_Project/Tests`. Run them from **Window → General → Test Runner**:
 
-- **EditMode** (`AS.Tests.EditMode`): the event bus, state machine, high score storage, wave scaling and object pool, plus checks that every data asset and prefab is wired up correctly.
+- **EditMode** (`AS.Tests.EditMode`): the event bus and arena channels, state machine, high score and settings storage, wave scaling and object pool, plus checks that every data asset and prefab is wired up correctly.
 - **PlayMode** (`AS.Tests.PlayMode`): play the real scene with simulated keyboard and mouse input.
 
 They can also run headless with the editor closed:
