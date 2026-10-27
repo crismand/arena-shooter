@@ -29,6 +29,7 @@ namespace AS.Tests
         protected Keyboard keyboard;
         protected Mouse mouse;
         protected GameManager game;
+        protected Arena arena;
         protected PlayerController player;
         protected EnemySpawner spawner;
         protected WaveDirector director;
@@ -64,6 +65,7 @@ namespace AS.Tests
         protected void FindSceneObjects()
         {
             game = Object.FindAnyObjectByType<GameManager>();
+            arena = Object.FindAnyObjectByType<Arena>();
             player = Object.FindAnyObjectByType<PlayerController>(FindObjectsInactive.Include);
             spawner = Object.FindAnyObjectByType<EnemySpawner>();
             director = Object.FindAnyObjectByType<WaveDirector>(FindObjectsInactive.Include);

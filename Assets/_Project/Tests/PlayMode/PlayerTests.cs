@@ -3,6 +3,7 @@ using System.Collections;
 using AS.Combat;
 using AS.Core;
 using AS.Enemies;
+using AS.Pickups;
 using AS.Player;
 using AS.UI;
 using NUnit.Framework;
@@ -67,6 +68,27 @@ namespace AS.Tests
             Assert.Greater(bullets.Length, 0, "No projectiles while the scripted source holds fire.");
             foreach (var bullet in bullets)
                 Assert.Greater(bullet.GetComponent<Rigidbody2D>().linearVelocity.y, 10f, "Projectile not travelling along the scripted aim.");
+        }
+
+        [UnityTest]
+        public IEnumerator GameplayObjects_AndTheBulletsTheyFire_AreInsideTheArena()
+        {
+            yield return LoadArena();
+            Assert.IsNotNull(arena, "No Arena in the scene.");
+            Assert.AreSame(arena, Arena.Of(player), "Player isn't under the Arena.");
+            Assert.AreSame(arena, Arena.Of(spawner), "Spawner isn't under the Arena.");
+            Assert.AreSame(arena, Arena.Of(director), "Wave director isn't under the Arena.");
+            Assert.AreSame(arena, Arena.Of(Object.FindAnyObjectByType<PickupDropper>()), "Pickup dropper isn't under the Arena.");
+
+            AimAt(player.transform.position + Vector3.right * 5f);
+            yield return null;
+            Press(mouse.leftButton);
+            yield return null;
+            Release(mouse.leftButton);
+
+            var bullet = Object.FindAnyObjectByType<Projectile>();
+            Assert.IsNotNull(bullet, "Fire didn't spawn a projectile.");
+            Assert.AreSame(arena, Arena.Of(bullet), "Projectile was pooled outside the Arena.");
         }
 
         /// <summary>Stands in for an agent: fixed commands, no Input System devices involved.</summary>

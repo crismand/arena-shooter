@@ -18,10 +18,13 @@ namespace AS.Pickups
         [SerializeField, Min(0.02f)] float blinkInterval = 0.15f;
 
         PowerUp _powerUp;
+        EventChannel _events;
         Action<Pickup> _release;
         float _expiresAt;
 
         public PowerUp PowerUp => _powerUp;
+
+        void Awake() => _events = Arena.EventsFor(this);
 
         public void Init(PowerUp powerUp, float lifetime, Action<Pickup> release)
         {
@@ -50,7 +53,7 @@ namespace AS.Pickups
             if (_powerUp == null) return;
             var receiver = other.GetComponentInParent<PowerUpReceiver>();
             if (receiver == null) return;
-            EventBus.Publish(new PickupCollected(transform.position, _powerUp.Color));
+            _events.Publish(new PickupCollected(transform.position, _powerUp.Color));
             _powerUp.Apply(receiver);
             Despawn();
         }

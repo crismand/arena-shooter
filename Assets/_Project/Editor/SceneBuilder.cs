@@ -623,18 +623,24 @@ namespace AS.EditorTools
             light.lightType = Light2D.LightType.Global;
             light.intensity = 1f;
 
-            var cameraBounds = BuildArena(square, layers.Wall);
+            // Everything that plays the game lives under the Arena root and uses its events; the
+            // camera, feedback and UI stay outside and listen on the global bus.
+            var arena = BuildArena(square, layers.Wall, out var cameraBounds);
             var player = BuildPlayer(input, weapon, circle, square, layers.Player);
+            player.transform.SetParent(arena.transform, false);
             BuildCamera(player.transform, cameraBounds);
             var spawner = BuildSpawner(player.transform);
+            spawner.transform.SetParent(arena.transform, false);
 
             var director = new GameObject("WaveDirector").AddComponent<WaveDirector>();
+            director.transform.SetParent(arena.transform, false);
             SetRef(director, "spawner", spawner);
             SetList(director, "waves", waves);
 
             var powerUps = new Object[PowerUpPaths.Length];
             for (int i = 0; i < powerUps.Length; i++) powerUps[i] = AssetDatabase.LoadAssetAtPath<PowerUp>(PowerUpPaths[i]);
             var dropper = new GameObject("PickupDropper").AddComponent<PickupDropper>();
+            dropper.transform.SetParent(arena.transform, false);
             SetRef(dropper, "pickupPrefab", AssetDatabase.LoadAssetAtPath<Pickup>(PickupPrefabPath));
             SetList(dropper, "powerUps", powerUps);
 
@@ -722,9 +728,10 @@ namespace AS.EditorTools
             }
         }
 
-        static PolygonCollider2D BuildArena(Sprite square, int wallLayer)
+        static Arena BuildArena(Sprite square, int wallLayer, out PolygonCollider2D cameraBounds)
         {
-            var arena = new GameObject("Arena").transform;
+            var arenaRoot = new GameObject("Arena").AddComponent<Arena>();
+            var arena = arenaRoot.transform;
 
             Quad("Floor", arena, Vector2.zero, new Vector2(HalfWidth * 2f, HalfHeight * 2f), square, FloorColor, -20);
 
@@ -755,7 +762,8 @@ namespace AS.EditorTools
             poly.isTrigger = true;
             float bx = HalfWidth + 1f, by = HalfHeight + 1f;
             poly.points = new[] { new Vector2(-bx, -by), new Vector2(-bx, by), new Vector2(bx, by), new Vector2(bx, -by) };
-            return poly;
+            cameraBounds = poly;
+            return arenaRoot;
         }
 
         static GameObject BuildPlayer(InputReader input, WeaponData weaponData, Sprite circle, Sprite square, int layer)

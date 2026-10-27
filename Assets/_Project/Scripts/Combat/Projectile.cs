@@ -13,12 +13,17 @@ namespace AS.Combat
     public class Projectile : MonoBehaviour
     {
         Rigidbody2D _body;
+        EventChannel _events;
         Action<Projectile> _release;
         DamageInfo _damage;
         float _despawnTime;
         bool _live;
 
-        void Awake() => _body = GetComponent<Rigidbody2D>();
+        void Awake()
+        {
+            _body = GetComponent<Rigidbody2D>();
+            _events = Arena.EventsFor(this);
+        }
 
         public void Launch(Vector2 direction, float speed, float lifetime, in DamageInfo damage, Action<Projectile> release)
         {
@@ -40,7 +45,7 @@ namespace AS.Combat
         {
             if (!_live) return;
             other.GetComponentInParent<IDamageable>()?.TakeDamage(_damage);
-            EventBus.Publish(new ProjectileImpact(transform.position));
+            _events.Publish(new ProjectileImpact(transform.position));
             Despawn();
         }
 

@@ -2,8 +2,8 @@ using UnityEngine;
 
 namespace AS.Core
 {
-    // Event payloads published through EventBus. Keep them small, immutable structs of plain
-    // values, so Core stays free of references to gameplay assemblies.
+    // Event payloads published on an EventChannel (an arena's, or the global EventBus). Keep them
+    // small, immutable structs of plain values, so Core stays free of references to gameplay assemblies.
 
     public readonly struct GameStateChanged
     {

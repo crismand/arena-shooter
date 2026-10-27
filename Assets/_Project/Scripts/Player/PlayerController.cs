@@ -19,6 +19,7 @@ namespace AS.Player
         [SerializeField, Min(0f)] float acceleration = 70f;
 
         Rigidbody2D _body;
+        EventChannel _events;
         // Read in Update, used in FixedUpdate. Reading input inside FixedUpdate isn't reliable: on
         // the Linux editor (CI) a WASD composite read there came back zero while Update saw it held.
         Vector2 _moveInput;
@@ -29,6 +30,7 @@ namespace AS.Player
         void Awake()
         {
             _body = GetComponent<Rigidbody2D>();
+            _events = Arena.EventsFor(this);
             if (InputSource == null) InputSource = GetComponent<IPlayerInput>();
         }
 
@@ -51,7 +53,7 @@ namespace AS.Player
             if (InputSource == null) return;
             _moveInput = Vector2.ClampMagnitude(InputSource.Move, 1f);
             if (InputSource.FireHeld && weapon.TryFire(aim.Direction))
-                EventBus.Publish(new ShotFired(transform.position, byPlayer: true));
+                _events.Publish(new ShotFired(transform.position, byPlayer: true));
         }
 
         void FixedUpdate()
@@ -63,15 +65,15 @@ namespace AS.Player
         void OnDamaged(DamageInfo _)
         {
             PublishHealth();
-            EventBus.Publish(new PlayerDamaged(transform.position));
+            _events.Publish(new PlayerDamaged(transform.position));
         }
 
         void OnDied()
         {
-            EventBus.Publish(new PlayerDied(transform.position));
+            _events.Publish(new PlayerDied(transform.position));
             gameObject.SetActive(false);
         }
 
-        void PublishHealth() => EventBus.Publish(new PlayerHealthChanged(health.Current, health.Max));
+        void PublishHealth() => _events.Publish(new PlayerHealthChanged(health.Current, health.Max));
     }
 }
