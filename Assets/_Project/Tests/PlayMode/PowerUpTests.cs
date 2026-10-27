@@ -28,10 +28,10 @@ namespace AS.Tests
         {
             yield return LoadArenaWithDropper();
 
-            EventBus.Publish(new EnemyKilled(0, new Vector2(5f, 0f), dropChance: 0f));
+            arena.Events.Publish(new EnemyKilled(0, new Vector2(5f, 0f), dropChance: 0f));
             Assert.AreEqual(0, _dropper.ActiveCount);
 
-            EventBus.Publish(new EnemyKilled(0, new Vector2(5f, 0f), dropChance: 1f));
+            arena.Events.Publish(new EnemyKilled(0, new Vector2(5f, 0f), dropChance: 1f));
             Assert.AreEqual(1, _dropper.ActiveCount);
         }
 
