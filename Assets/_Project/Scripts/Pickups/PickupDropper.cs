@@ -4,8 +4,8 @@ using UnityEngine;
 namespace AS.Pickups
 {
     /// <summary>
-    /// Listens for <see cref="EnemyKilled"/> and, using the enemy's drop chance, leaves a random
-    /// power-up where it died. Pickups are pooled.
+    /// Listens for <see cref="EnemyKilled"/> in its arena and, using the enemy's drop chance, leaves a
+    /// random power-up where it died. Pickups are pooled.
     /// </summary>
     public class PickupDropper : MonoBehaviour
     {
@@ -15,13 +15,23 @@ namespace AS.Pickups
         [SerializeField, Min(1f)] float pickupLifetime = 10f;
 
         PrefabPool<Pickup> _pool;
+        EventChannel _events;
 
         public int ActiveCount => _pool.CountActive;
 
-        void Awake() => _pool = new PrefabPool<Pickup>(pickupPrefab, transform);
+        void Awake()
+        {
+            _pool = new PrefabPool<Pickup>(pickupPrefab, transform);
+            _events = Arena.EventsFor(this);
+            _events.Subscribe<ArenaReset>(OnArenaReset);
+        }
 
-        void OnEnable() => EventBus.Subscribe<EnemyKilled>(OnEnemyKilled);
-        void OnDisable() => EventBus.Unsubscribe<EnemyKilled>(OnEnemyKilled);
+        void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
+
+        void OnArenaReset(ArenaReset _) => _pool.ReleaseAll();
+
+        void OnEnable() => _events.Subscribe<EnemyKilled>(OnEnemyKilled);
+        void OnDisable() => _events.Unsubscribe<EnemyKilled>(OnEnemyKilled);
 
         void OnEnemyKilled(EnemyKilled evt)
         {

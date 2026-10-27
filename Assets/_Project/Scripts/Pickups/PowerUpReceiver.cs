@@ -21,8 +21,22 @@ namespace AS.Pickups
         public bool HasWeaponBoost => _weaponBoostEndsAt > 0f;
         public bool HasShield => _shieldEndsAt > 0f;
 
+        EventChannel _events;
+
         void Awake()
         {
+            _events = Arena.EventsFor(this);
+            _events.Subscribe<ArenaReset>(OnArenaReset);
+            if (shieldVisual != null) shieldVisual.SetActive(false);
+        }
+
+        void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
+
+        void OnArenaReset(ArenaReset _)
+        {
+            weapon.SetOverride(null);
+            _weaponBoostEndsAt = 0f;
+            _shieldEndsAt = 0f;
             if (shieldVisual != null) shieldVisual.SetActive(false);
         }
 
@@ -30,7 +44,7 @@ namespace AS.Pickups
         {
             weapon.SetOverride(boosted);
             _weaponBoostEndsAt = Time.time + duration;
-            EventBus.Publish(new PowerUpActivated(label, duration));
+            _events.Publish(new PowerUpActivated(label, duration));
         }
 
         public void RaiseShield(float duration, string label)
@@ -38,7 +52,7 @@ namespace AS.Pickups
             health.GrantInvulnerability(duration);
             _shieldEndsAt = Time.time + duration;
             if (shieldVisual != null) shieldVisual.SetActive(true);
-            EventBus.Publish(new PowerUpActivated(label, duration));
+            _events.Publish(new PowerUpActivated(label, duration));
         }
 
         void Update()

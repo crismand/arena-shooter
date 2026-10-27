@@ -16,8 +16,9 @@ namespace AS.Tests
     /// <summary>
     /// Shared setup for tests that play the real Arena scene: a simulated keyboard and mouse,
     /// handles to the main scene objects, and helpers. The wave director is switched off unless a
-    /// test asks for waves, so enemies only appear where the test puts them. High scores go to a
-    /// throwaway PlayerPrefs key, so tests never touch the real best score.
+    /// test asks for waves, so enemies only appear where the test puts them, and the run starts
+    /// past the title screen unless a test asks to stay on it. High scores and settings go to
+    /// throwaway PlayerPrefs keys, so tests never touch the real ones.
     /// </summary>
     public abstract class ArenaTestFixture : InputTestFixture
     {
@@ -25,10 +26,12 @@ namespace AS.Tests
         protected const string ShooterPrefabPath = "Assets/_Project/Prefabs/Enemies/Shooter.prefab";
         protected const string TankPrefabPath = "Assets/_Project/Prefabs/Enemies/Tank.prefab";
         const string TestHighScoreKey = "AS.HighScore.Tests";
+        const string TestSettingsPrefix = "AS.Settings.Tests.";
 
         protected Keyboard keyboard;
         protected Mouse mouse;
         protected GameManager game;
+        protected Arena arena;
         protected PlayerController player;
         protected EnemySpawner spawner;
         protected WaveDirector director;
@@ -42,6 +45,8 @@ namespace AS.Tests
             chaserPrefab = LoadAsset<Chaser>(ChaserPrefabPath);
             HighScoreStore.Key = TestHighScoreKey;
             HighScoreStore.Clear();
+            GameSettings.KeyPrefix = TestSettingsPrefix;
+            GameSettings.Clear();
         }
 
         public override void TearDown()
@@ -49,14 +54,18 @@ namespace AS.Tests
             Time.timeScale = 1f;
             HighScoreStore.Clear();
             HighScoreStore.Key = HighScoreStore.DefaultKey;
+            GameSettings.Clear();
+            GameSettings.KeyPrefix = GameSettings.DefaultKeyPrefix;
             base.TearDown();
         }
 
-        protected IEnumerator LoadArena(bool waves = false)
+        protected IEnumerator LoadArena(bool waves = false, bool stayOnTitle = false)
         {
             SceneManager.LoadScene("Arena");
             yield return null;
             FindSceneObjects();
+            // Play first: it resets the arena, which turns the director back on.
+            if (!stayOnTitle) game.Play();
             director.enabled = waves;
             yield return null;
         }
@@ -64,6 +73,7 @@ namespace AS.Tests
         protected void FindSceneObjects()
         {
             game = Object.FindAnyObjectByType<GameManager>();
+            arena = Object.FindAnyObjectByType<Arena>();
             player = Object.FindAnyObjectByType<PlayerController>(FindObjectsInactive.Include);
             spawner = Object.FindAnyObjectByType<EnemySpawner>();
             director = Object.FindAnyObjectByType<WaveDirector>(FindObjectsInactive.Include);

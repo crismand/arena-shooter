@@ -27,6 +27,8 @@ namespace AS.Enemies
         public EnemyData Data => data;
         public Health Health { get; private set; }
         protected Rigidbody2D Body { get; private set; }
+        /// <summary>The events of the arena this enemy was spawned into.</summary>
+        protected EventChannel Events { get; private set; }
         protected Transform Target { get; private set; }
         protected bool HasTarget => Target != null && Target.gameObject.activeInHierarchy;
 
@@ -34,6 +36,7 @@ namespace AS.Enemies
         {
             Body = GetComponent<Rigidbody2D>();
             Health = GetComponent<Health>();
+            Events = Arena.EventsFor(this);
             var sprite = visual != null ? visual.GetComponent<SpriteRenderer>() : null;
             _color = sprite != null ? sprite.color : Color.white;
         }
@@ -86,11 +89,11 @@ namespace AS.Enemies
             collision.collider.GetComponentInParent<IDamageable>()?.TakeDamage(new DamageInfo(data.ContactDamage, direction, gameObject));
         }
 
-        void OnDamaged(DamageInfo _) => EventBus.Publish(new EnemyDamaged(transform.position));
+        void OnDamaged(DamageInfo _) => Events.Publish(new EnemyDamaged(transform.position));
 
         void OnDied()
         {
-            EventBus.Publish(new EnemyKilled(data.ScoreValue, transform.position, data.DropChance, _color));
+            Events.Publish(new EnemyKilled(data.ScoreValue, transform.position, data.DropChance, _color));
             if (_release != null) _release(this);
             else Destroy(gameObject);
         }

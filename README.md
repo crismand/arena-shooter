@@ -1,5 +1,7 @@
 # Arena Shooter
 
+[![Tests](https://github.com/crismand/arena-shooter/actions/workflows/tests.yml/badge.svg?branch=dev)](https://github.com/crismand/arena-shooter/actions/workflows/tests.yml)
+
 A top-down twin-stick shooter made in Unity 6.3. Survive wave after wave of enemies in a single arena, grab power-ups, and chase a high score.
 
 ![Gameplay: the player in the arena after clearing wave 1](media/gameplay.png)
@@ -23,7 +25,8 @@ Download the latest Windows build from [Releases](https://github.com/crismand/ar
 - **Waves.** Four hand-designed waves, then endless waves that keep getting bigger and faster.
 - **Power-ups.** Enemies sometimes drop Spread shot, Rapid fire or a Shield.
 - **Game feel.** Screen shake, hit-stop, particle bursts, sound effects and music.
-- **High score.** Saved between sessions, shown on the HUD and the game over screen.
+- **High score.** Saved between sessions, shown on the title screen, the HUD and the game over screen.
+- **Menus.** A title screen, instant restarts, and settings for music and effects volume and fullscreen.
 
 ![Game over screen with score, wave reached, best score, and Restart and Quit buttons](media/game-over.png)
 
@@ -49,7 +52,7 @@ The scene, prefabs, placeholder sprites and sounds, audio mixer and physics laye
 
 The tests live in `Assets/_Project/Tests`. Run them from **Window → General → Test Runner**:
 
-- **EditMode** (`AS.Tests.EditMode`): the event bus, state machine, high score storage, wave scaling and object pool, plus checks that every data asset and prefab is wired up correctly.
+- **EditMode** (`AS.Tests.EditMode`): the event bus and arena channels, state machine, high score and settings storage, wave scaling and object pool, plus checks that every data asset and prefab is wired up correctly.
 - **PlayMode** (`AS.Tests.PlayMode`): play the real scene with simulated keyboard and mouse input.
 
 They can also run headless with the editor closed:
@@ -71,7 +74,36 @@ The build goes to `Builds/Windows/ArenaShooter.exe`; add `-development` for a de
 
 ### Branches
 
-`main` holds released versions, each tagged (`v1.0.0`, …). Day-to-day work branches off `dev` and merges back into it, and `dev` is merged into `main` for a release.
+`main` holds released versions, each tagged (`v1.0.0`, …). Day-to-day work branches off `dev` and merges back into it, and `dev` is merged into `main` through a pull request for a release.
+
+### CI
+
+GitHub Actions run the tests in Unity using [GameCI](https://game.ci/):
+
+| Workflow | Runs when | What it does |
+|---|---|---|
+| [Tests](.github/workflows/tests.yml) | Push to `dev` (unless only docs changed), any pull request into `main`, or started by hand | EditMode and PlayMode tests, as two parallel jobs |
+| [Release](.github/workflows/release.yml) | A `v*` tag is pushed | All tests, then a Windows build, then a **draft** release with the zipped build attached |
+
+Unity needs a license to run in CI. The workflows read three repository secrets, which the repository owner sets once:
+
+```bash
+gh secret set UNITY_LICENSE --repo crismand/arena-shooter < "C:\ProgramData\Unity\Unity_lic.ulf"
+gh secret set UNITY_EMAIL --repo crismand/arena-shooter
+gh secret set UNITY_PASSWORD --repo crismand/arena-shooter
+```
+
+The `.ulf` file appears after activating a Personal license in Unity Hub (Preferences → Licenses). Pull requests from forks don't receive secrets, so their Unity jobs can't run.
+
+### Releasing
+
+1. Merge `dev` into `main` through a pull request (the tests must pass).
+2. Tag the merge commit on `main` and push the tag:
+   ```bash
+   git tag -a v1.1.0 -m "Arena Shooter v1.1.0"
+   git push origin v1.1.0
+   ```
+3. The Release workflow tests, builds and creates a draft release with `ArenaShooter-v1.1.0-windows-x64.zip`. Edit the notes on GitHub, then press **Publish release**.
 
 ## Roadmap
 

@@ -3,9 +3,12 @@ using System.Collections;
 using AS.Combat;
 using AS.Core;
 using AS.Enemies;
+using AS.Pickups;
+using AS.Player;
 using AS.UI;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
@@ -48,6 +51,59 @@ namespace AS.Tests
             // Shorter than the blaster's 1.5 s lifetime, so only a wall hit can have removed them.
             yield return new WaitForSeconds(1.2f);
             Assert.AreEqual(0, Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None).Length);
+        }
+
+        [UnityTest]
+        public IEnumerator ScriptedInputSource_MovesAimsAndFires_WithoutDevices()
+        {
+            yield return LoadArena();
+            var scripted = new ScriptedInput { Move = Vector2.left, Aim = Vector2.up, FireHeld = true };
+            player.InputSource = scripted;
+            player.GetComponent<PlayerAim>().InputSource = scripted;
+            float startX = player.transform.position.x;
+
+            yield return new WaitForSeconds(0.3f);
+
+            Assert.Less(player.transform.position.x, startX - 0.5f, "Player didn't follow the scripted move.");
+            var bullets = Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None);
+            Assert.Greater(bullets.Length, 0, "No projectiles while the scripted source holds fire.");
+            foreach (var bullet in bullets)
+                Assert.Greater(bullet.GetComponent<Rigidbody2D>().linearVelocity.y, 10f, "Projectile not travelling along the scripted aim.");
+        }
+
+        [UnityTest]
+        public IEnumerator GameplayObjects_AndTheBulletsTheyFire_AreInsideTheArena()
+        {
+            yield return LoadArena();
+            Assert.IsNotNull(arena, "No Arena in the scene.");
+            Assert.AreSame(arena, Arena.Of(player), "Player isn't under the Arena.");
+            Assert.AreSame(arena, Arena.Of(spawner), "Spawner isn't under the Arena.");
+            Assert.AreSame(arena, Arena.Of(director), "Wave director isn't under the Arena.");
+            Assert.AreSame(arena, Arena.Of(Object.FindAnyObjectByType<PickupDropper>()), "Pickup dropper isn't under the Arena.");
+
+            AimAt(player.transform.position + Vector3.right * 5f);
+            yield return null;
+            Press(mouse.leftButton);
+            yield return null;
+            Release(mouse.leftButton);
+
+            var bullet = Object.FindAnyObjectByType<Projectile>();
+            Assert.IsNotNull(bullet, "Fire didn't spawn a projectile.");
+            Assert.AreSame(arena, Arena.Of(bullet), "Projectile was pooled outside the Arena.");
+        }
+
+        /// <summary>Stands in for an agent: fixed commands, no Input System devices involved.</summary>
+        class ScriptedInput : IPlayerInput
+        {
+            public Vector2 Move { get; set; }
+            public bool FireHeld { get; set; }
+            public Vector2 Aim { get; set; }
+
+            public bool TryGetAim(out Vector2 direction)
+            {
+                direction = Aim;
+                return true;
+            }
         }
 
         // ------------------------------------------------------------------ enemies and score
@@ -168,12 +224,100 @@ namespace AS.Tests
             Assert.AreEqual(0, spawner.ActiveCount);
             Assert.IsFalse(Object.FindAnyObjectByType<GameOverScreen>().IsVisible);
 
-            // Input must survive the reload (old GameManager disables it, new one re-enables it).
+            // Input must survive the restart (game over turned gameplay input off).
             float startX = player.transform.position.x;
             Press(keyboard.dKey);
             yield return new WaitForSeconds(0.3f);
             Release(keyboard.dKey);
             Assert.Greater(player.transform.position.x, startX + 0.5f, "Player can't move after restart.");
+        }
+
+        [UnityTest]
+        public IEnumerator Restart_MidRun_ResetsTheArenaInPlace_WithoutReloadingTheScene()
+        {
+            yield return LoadArena();
+            var sceneHandle = SceneManager.GetActiveScene().handle;
+            var playerBefore = player;
+            Vector3 startPosition = player.transform.position;
+            var health = player.GetComponent<Health>();
+            var receiver = player.GetComponent<PowerUpReceiver>();
+            var dropper = Object.FindAnyObjectByType<PickupDropper>();
+
+            // Make a mess: score, a hurt and moved player, a shield, enemies, a pickup and bullets in flight.
+            arena.Events.Publish(new EnemyKilled(50, new Vector2(5f, 0f), dropChance: 0f));
+            Assert.AreEqual(50, game.Score);
+            health.TakeDamage(new DamageInfo(1f, Vector2.zero, null));
+            receiver.RaiseShield(10f, "SHIELD");
+            spawner.Spawn(chaserPrefab, startPosition + Vector3.up * 8f);
+            spawner.Spawn(chaserPrefab, startPosition + Vector3.down * 8f);
+            dropper.Spawn(LoadAsset<PowerUp>("Assets/_Project/Data/PowerUps/PowerUp_Shield.asset"), startPosition + Vector3.left * 5f);
+            AimAt(startPosition + Vector3.right * 5f);
+            Press(keyboard.dKey);
+            Press(mouse.leftButton);
+            yield return new WaitForSeconds(0.3f);
+            Release(mouse.leftButton);
+            Release(keyboard.dKey);
+            Assert.Greater(Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None).Length, 0);
+
+            game.Restart();
+            yield return null;
+
+            Assert.AreEqual(sceneHandle, SceneManager.GetActiveScene().handle, "Restart reloaded the scene.");
+            Assert.AreSame(playerBefore, Object.FindAnyObjectByType<PlayerController>(), "Player was replaced.");
+            Assert.IsTrue(game.State.Is(GameState.Playing));
+            Assert.AreEqual(0, game.Score);
+            Assert.AreEqual(health.Max, health.Current);
+            Assert.Less(Vector2.Distance(player.transform.position, startPosition), 0.1f, "Player not back at the start.");
+            Assert.IsFalse(receiver.HasShield, "Shield survived the reset.");
+            Assert.AreEqual(0, spawner.ActiveCount, "Enemies survived the reset.");
+            Assert.AreEqual(0, dropper.ActiveCount, "Pickups survived the reset.");
+            Assert.AreEqual(0, Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None).Length, "Bullets survived the reset.");
+            Assert.IsTrue(director.enabled);
+            Assert.AreEqual(0, director.CurrentWave, "Waves didn't start over.");
+            Assert.AreEqual("", FindText("UI/HUD/PowerUps").text, "HUD still lists the shield.");
+        }
+
+        [UnityTest]
+        public IEnumerator Restart_FromThePauseMenu_ResumesAFreshRun()
+        {
+            yield return LoadArena();
+            game.SetPaused(true);
+            yield return null;
+            Assert.IsTrue(Object.FindAnyObjectByType<PauseMenu>().IsVisible);
+
+            game.Restart();
+            yield return null;
+
+            Assert.IsTrue(game.State.Is(GameState.Playing));
+            Assert.AreEqual(1f, Time.timeScale);
+            Assert.IsFalse(Object.FindAnyObjectByType<PauseMenu>().IsVisible);
+            float startX = player.transform.position.x;
+            Press(keyboard.dKey);
+            yield return new WaitForSeconds(0.3f);
+            Release(keyboard.dKey);
+            Assert.Greater(player.transform.position.x, startX + 0.5f, "Player can't move after restarting from pause.");
+        }
+
+        [UnityTest]
+        public IEnumerator Restart_CutsTheCameraBackToThePlayer_InsteadOfGliding()
+        {
+            yield return LoadArena();
+            var camera = Camera.main.transform;
+            yield return new WaitForSeconds(0.5f);
+            Vector3 startView = camera.position;
+
+            // Off to the side, and long enough for the follow damping to catch up.
+            var body = player.GetComponent<Rigidbody2D>();
+            body.position = new Vector2(12f, 0f);
+            player.transform.position = body.position;
+            yield return new WaitForSeconds(1.5f);
+            Assert.Greater(camera.position.x, startView.x + 2f, "Camera never followed the player.");
+
+            game.Restart();
+            yield return null;
+            yield return null;
+
+            Assert.Less(Vector2.Distance(camera.position, startView), 0.1f, "Camera glided instead of cutting back.");
         }
 
         [UnityTest]

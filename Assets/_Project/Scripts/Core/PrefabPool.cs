@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
 
@@ -10,6 +11,9 @@ namespace AS.Core
     public sealed class PrefabPool<T> where T : Component
     {
         readonly ObjectPool<T> _pool;
+        // ObjectPool can't list what's out, and ReleaseAll needs to.
+        readonly HashSet<T> _active = new();
+        readonly List<T> _releasing = new();
 
         public PrefabPool(T prefab, Transform parent = null, int defaultCapacity = 32, int maxSize = 512)
         {
@@ -34,9 +38,25 @@ namespace AS.Core
             var item = _pool.Get();
             item.transform.SetPositionAndRotation(position, rotation);
             item.gameObject.SetActive(true);
+            _active.Add(item);
             return item;
         }
 
-        public void Release(T item) => _pool.Release(item);
+        public void Release(T item)
+        {
+            _active.Remove(item);
+            _pool.Release(item);
+        }
+
+        /// <summary>Returns every item that's out. Items destroyed from outside the pool are just forgotten.</summary>
+        public void ReleaseAll()
+        {
+            _releasing.Clear();
+            _releasing.AddRange(_active);
+            _active.Clear();
+            foreach (var item in _releasing)
+                if (item != null) _pool.Release(item);
+            _releasing.Clear();
+        }
     }
 }

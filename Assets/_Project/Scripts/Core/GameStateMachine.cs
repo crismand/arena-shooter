@@ -3,6 +3,7 @@ namespace AS.Core
     public enum GameState
     {
         Boot,
+        Title,
         Playing,
         Paused,
         GameOver,

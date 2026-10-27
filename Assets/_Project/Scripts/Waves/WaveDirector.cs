@@ -9,7 +9,7 @@ namespace AS.Waves
     /// <summary>
     /// Runs the authored waves in order, then keeps going with the last one scaled up: more
     /// enemies and shorter spawn intervals each wave. A wave ends when everything it spawned is
-    /// dead. Stops on game over.
+    /// dead. Stops when the player in its arena dies, and starts over from wave 1 when the arena resets.
     /// </summary>
     public class WaveDirector : MonoBehaviour
     {
@@ -28,27 +28,42 @@ namespace AS.Waves
         [SerializeField, Min(0.05f)] float minInterval = 0.25f;
 
         Coroutine _run;
+        EventChannel _events;
 
         public int CurrentWave { get; private set; }
 
+        void Awake()
+        {
+            _events = Arena.EventsFor(this);
+            // For the object's lifetime: the director is disabled once the player dies.
+            _events.Subscribe<ArenaReset>(OnArenaReset);
+        }
+
+        void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
+
+        /// <summary>Back to before wave 1, then running again (restarted if it was still going).</summary>
+        void OnArenaReset(ArenaReset _)
+        {
+            enabled = false;
+            CurrentWave = 0;
+            enabled = true;
+        }
+
         void OnEnable()
         {
-            EventBus.Subscribe<GameStateChanged>(OnGameStateChanged);
+            _events.Subscribe<PlayerDied>(OnPlayerDied);
             _run = StartCoroutine(Run());
         }
 
         void OnDisable()
         {
-            EventBus.Unsubscribe<GameStateChanged>(OnGameStateChanged);
+            _events.Unsubscribe<PlayerDied>(OnPlayerDied);
             // Disabling a component doesn't stop its coroutines.
             if (_run != null) StopCoroutine(_run);
             _run = null;
         }
 
-        void OnGameStateChanged(GameStateChanged evt)
-        {
-            if (evt.Current == GameState.GameOver) enabled = false;
-        }
+        void OnPlayerDied(PlayerDied _) => enabled = false;
 
         IEnumerator Run()
         {
@@ -57,7 +72,7 @@ namespace AS.Waves
             {
                 CurrentWave++;
                 var queue = BuildSpawnQueue(CurrentWave, out float interval);
-                EventBus.Publish(new WaveStarted(CurrentWave, queue.Count));
+                _events.Publish(new WaveStarted(CurrentWave, queue.Count));
 
                 foreach (var prefab in queue)
                 {
@@ -67,7 +82,7 @@ namespace AS.Waves
                 }
 
                 while (spawner.ActiveCount > 0) yield return null;
-                EventBus.Publish(new WaveCleared(CurrentWave));
+                _events.Publish(new WaveCleared(CurrentWave));
                 yield return new WaitForSeconds(timeBetweenWaves);
             }
         }
