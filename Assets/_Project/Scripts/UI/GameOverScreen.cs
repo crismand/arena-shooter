@@ -24,6 +24,7 @@ namespace AS.UI
             EventBus.Subscribe<ScoreChanged>(OnScoreChanged);
             EventBus.Subscribe<WaveStarted>(OnWaveStarted);
             EventBus.Subscribe<HighScoreChanged>(OnHighScoreChanged);
+            EventBus.Subscribe<ArenaReset>(OnArenaReset);
         }
 
         void OnDisable()
@@ -32,10 +33,12 @@ namespace AS.UI
             EventBus.Unsubscribe<ScoreChanged>(OnScoreChanged);
             EventBus.Unsubscribe<WaveStarted>(OnWaveStarted);
             EventBus.Unsubscribe<HighScoreChanged>(OnHighScoreChanged);
+            EventBus.Unsubscribe<ArenaReset>(OnArenaReset);
         }
 
         void OnScoreChanged(ScoreChanged evt) => _score = evt.Score;
         void OnWaveStarted(WaveStarted evt) => _wave = evt.Number;
+        void OnArenaReset(ArenaReset _) => _wave = 0;
 
         void OnHighScoreChanged(HighScoreChanged evt)
         {
@@ -45,7 +48,12 @@ namespace AS.UI
 
         void OnGameStateChanged(GameStateChanged evt)
         {
-            if (evt.Current != GameState.GameOver) return;
+            if (evt.Current != GameState.GameOver)
+            {
+                // A restart now resets the scene in place, so this screen has to hide itself.
+                if (IsVisible) SetVisible(false);
+                return;
+            }
             string bestLine = _newRecord
                 ? $"<color=#{ColorUtility.ToHtmlStringRGB(recordColor)}>NEW BEST!</color>"
                 : $"Best {_best}";

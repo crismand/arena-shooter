@@ -27,12 +27,19 @@ namespace AS.Player
         /// <summary>Defaults to the <see cref="IPlayerInput"/> on this object; set it to hand control elsewhere.</summary>
         public IPlayerInput InputSource { get; set; }
 
+        Vector3 _startPosition;
+
         void Awake()
         {
             _body = GetComponent<Rigidbody2D>();
             _events = Arena.EventsFor(this);
             if (InputSource == null) InputSource = GetComponent<IPlayerInput>();
+            _startPosition = transform.position;
+            // For the object's lifetime: the player is inactive after dying, when a reset matters most.
+            _events.Subscribe<ArenaReset>(OnArenaReset);
         }
+
+        void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
 
         void OnEnable()
         {
@@ -72,6 +79,17 @@ namespace AS.Player
         {
             _events.Publish(new PlayerDied(transform.position));
             gameObject.SetActive(false);
+        }
+
+        void OnArenaReset(ArenaReset _)
+        {
+            health.ResetHealth(health.Max);
+            transform.position = _startPosition;
+            _body.position = _startPosition;
+            _body.linearVelocity = Vector2.zero;
+            _moveInput = Vector2.zero;
+            gameObject.SetActive(true);
+            PublishHealth();
         }
 
         void PublishHealth() => _events.Publish(new PlayerHealthChanged(health.Current, health.Max));

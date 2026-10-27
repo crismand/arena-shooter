@@ -5,12 +5,14 @@ namespace AS.Core
 {
     /// <summary>
     /// Owns the run: game state, input, pausing, score, high score and restart. Lives in the Arena
-    /// scene; a restart simply reloads the scene, so only the high score persists between runs.
+    /// scene. A restart resets the <see cref="arena"/> in place instead of reloading the scene.
     /// </summary>
     [DefaultExecutionOrder(-1000)]
     public class GameManager : MonoBehaviour
     {
         [SerializeField] InputReader input;
+        [Tooltip("The arena on screen. Restart resets it in place; without one, Restart reloads the scene.")]
+        [SerializeField] Arena arena;
 
         public GameStateMachine State { get; } = new();
         public int Score { get; private set; }
@@ -33,9 +35,13 @@ namespace AS.Core
             EventBus.Unsubscribe<EnemyKilled>(OnEnemyKilled);
         }
 
-        void Start()
+        void Start() => BeginRun();
+
+        void BeginRun()
         {
             Time.timeScale = 1f;
+            input.GameplayEnabled = true;
+            Score = 0;
             HighScore = HighScoreStore.Load();
             EventBus.Publish(new HighScoreChanged(HighScore, false));
             EventBus.Publish(new ScoreChanged(Score));
@@ -59,10 +65,18 @@ namespace AS.Core
         /// <summary>For UI buttons.</summary>
         public void Resume() => SetPaused(false);
 
+        /// <summary>For UI buttons. Works from game over and from the pause menu.</summary>
         public void Restart()
         {
-            Time.timeScale = 1f;
-            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            if (arena == null)
+            {
+                Time.timeScale = 1f;
+                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+                return;
+            }
+            // Arena first, so the player is back and the old enemies gone before the state says Playing.
+            arena.ResetArena();
+            BeginRun();
         }
 
         /// <summary>Closes the game. In the editor, where Application.Quit does nothing, it leaves Play mode instead.</summary>

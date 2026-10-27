@@ -109,6 +109,14 @@ namespace AS.Core
         public WaveStarted(int number, int enemyCount) { Number = number; EnemyCount = enemyCount; }
     }
 
+    /// <summary>
+    /// The arena is starting over: everything in it returns to how the run began. Published by
+    /// <see cref="Arena.ResetArena"/>. Listeners that can be inactive when it arrives (the player
+    /// after dying, a disabled wave director, pooled enemies) subscribe for their whole lifetime,
+    /// in Awake and OnDestroy, rather than in OnEnable.
+    /// </summary>
+    public readonly struct ArenaReset { }
+
     public readonly struct WaveCleared
     {
         public readonly int Number;

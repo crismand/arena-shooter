@@ -626,6 +626,7 @@ namespace AS.EditorTools
             // Everything that plays the game lives under the Arena root and uses its events; the
             // camera, feedback and UI stay outside and listen on the global bus.
             var arena = BuildArena(square, layers.Wall, out var cameraBounds);
+            SetRef(gameManager, "arena", arena);
             var player = BuildPlayer(input, weapon, circle, square, layers.Player);
             player.transform.SetParent(arena.transform, false);
             BuildCamera(player.transform, cameraBounds);
@@ -1029,6 +1030,8 @@ namespace AS.EditorTools
             vcamGo.AddComponent<CinemachineConfiner2D>().BoundingShape2D = bounds;
             // Receives the ScreenShake impulses.
             vcamGo.AddComponent<CinemachineImpulseListener>();
+            // A restart cuts back to the player instead of gliding.
+            vcamGo.AddComponent<CameraSnap>();
         }
 
         // ------------------------------------------------------------------ helpers

@@ -76,5 +76,35 @@ namespace AS.Tests
             Assert.AreNotSame(a, b);
             Assert.AreEqual(2, pool.CountActive);
         }
+
+        [Test]
+        public void ReleaseAll_ReturnsEverythingThatsOut_AndTheItemsAreReused()
+        {
+            var pool = NewPool();
+            var first = pool.Get(Vector3.zero, Quaternion.identity);
+            var second = pool.Get(Vector3.zero, Quaternion.identity);
+            Track(first.gameObject);
+            Track(second.gameObject);
+
+            pool.ReleaseAll();
+
+            Assert.AreEqual(0, pool.CountActive);
+            Assert.IsFalse(first.gameObject.activeSelf);
+            Assert.IsFalse(second.gameObject.activeSelf);
+            var again = pool.Get(Vector3.zero, Quaternion.identity);
+            Assert.IsTrue(again == first || again == second, "ReleaseAll didn't put the items back in the pool.");
+        }
+
+        [Test]
+        public void ReleaseAll_AfterAnItemReleasedItself_DoesntReleaseItTwice()
+        {
+            var pool = NewPool();
+            var item = pool.Get(Vector3.zero, Quaternion.identity);
+            Track(item.gameObject);
+            pool.Release(item);
+
+            Assert.DoesNotThrow(() => pool.ReleaseAll());
+            Assert.AreEqual(0, pool.CountActive);
+        }
     }
 }

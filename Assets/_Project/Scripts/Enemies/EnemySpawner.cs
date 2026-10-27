@@ -16,6 +16,21 @@ namespace AS.Enemies
         [SerializeField, Min(0f)] float minDistanceFromTarget = 6f;
 
         readonly Dictionary<EnemyBase, PrefabPool<EnemyBase>> _pools = new();
+        EventChannel _events;
+
+        void Awake()
+        {
+            _events = Arena.EventsFor(this);
+            _events.Subscribe<ArenaReset>(OnArenaReset);
+        }
+
+        void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
+
+        // Straight back to the pool: a reset isn't a kill, so no score, drops or effects.
+        void OnArenaReset(ArenaReset _)
+        {
+            foreach (var pool in _pools.Values) pool.ReleaseAll();
+        }
 
         public int ActiveCount
         {
