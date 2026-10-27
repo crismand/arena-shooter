@@ -9,7 +9,7 @@ namespace AS.Waves
     /// <summary>
     /// Runs the authored waves in order, then keeps going with the last one scaled up: more
     /// enemies and shorter spawn intervals each wave. A wave ends when everything it spawned is
-    /// dead. Stops when the player in its arena dies.
+    /// dead. Stops when the player in its arena dies, and starts over from wave 1 when the arena resets.
     /// </summary>
     public class WaveDirector : MonoBehaviour
     {
@@ -32,7 +32,22 @@ namespace AS.Waves
 
         public int CurrentWave { get; private set; }
 
-        void Awake() => _events = Arena.EventsFor(this);
+        void Awake()
+        {
+            _events = Arena.EventsFor(this);
+            // For the object's lifetime: the director is disabled once the player dies.
+            _events.Subscribe<ArenaReset>(OnArenaReset);
+        }
+
+        void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
+
+        /// <summary>Back to before wave 1, then running again (restarted if it was still going).</summary>
+        void OnArenaReset(ArenaReset _)
+        {
+            enabled = false;
+            CurrentWave = 0;
+            enabled = true;
+        }
 
         void OnEnable()
         {

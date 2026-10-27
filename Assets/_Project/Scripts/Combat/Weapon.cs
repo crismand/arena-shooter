@@ -19,6 +19,7 @@ namespace AS.Combat
         float _nextShotTime;
         // Bullets live under the shooter's arena so they publish on its events, not another arena's.
         Transform _poolParent;
+        EventChannel _events;
 
         /// <summary>The data currently in use: the override if one is set, otherwise the base weapon.</summary>
         public WeaponData Data => _override != null ? _override : data;
@@ -28,6 +29,17 @@ namespace AS.Combat
             if (muzzle == null) muzzle = transform;
             var arena = Arena.Of(this);
             if (arena != null) _poolParent = arena.transform;
+            // For the object's lifetime: a dead Shooter's bullets can still be in flight.
+            _events = Arena.EventsFor(this);
+            _events.Subscribe<ArenaReset>(OnArenaReset);
+        }
+
+        void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
+
+        void OnArenaReset(ArenaReset _)
+        {
+            foreach (var pool in _pools.Values) pool.ReleaseAll();
+            _nextShotTime = 0f;
         }
 
         /// <summary>Use <paramref name="weaponData"/> instead of the base weapon until cleared with null.</summary>

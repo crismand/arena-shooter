@@ -17,7 +17,7 @@ The game was built in six steps, each on its own branch and merged into `main`.
 
 Instant restarts and the menus the game is missing. Also ships the groundwork already on `dev`: CI, the movement input fix, and steps 1 and 2 of the ML-Agents player below.
 
-- [ ] Instant restart: a run resets in place instead of reloading the scene (step 3 of the ML-Agents player).
+- [x] Instant restart: a run resets in place instead of reloading the scene (step 3 of the ML-Agents player).
 - [ ] Quit button in the pause menu as well.
 - [ ] Settings menu: music and effects volume (through the existing Music and SFX mixer groups), fullscreen toggle.
 - [ ] Title screen with Play, Settings and Quit, plus the best score.

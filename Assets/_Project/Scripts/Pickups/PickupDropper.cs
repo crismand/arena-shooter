@@ -23,7 +23,12 @@ namespace AS.Pickups
         {
             _pool = new PrefabPool<Pickup>(pickupPrefab, transform);
             _events = Arena.EventsFor(this);
+            _events.Subscribe<ArenaReset>(OnArenaReset);
         }
+
+        void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
+
+        void OnArenaReset(ArenaReset _) => _pool.ReleaseAll();
 
         void OnEnable() => _events.Subscribe<EnemyKilled>(OnEnemyKilled);
         void OnDisable() => _events.Unsubscribe<EnemyKilled>(OnEnemyKilled);

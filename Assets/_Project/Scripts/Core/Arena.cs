@@ -19,6 +19,13 @@ namespace AS.Core
         // Created on first use: children look it up in their own Awake, which can run before ours.
         public EventChannel Events => _events ??= new EventChannel(forwardToGlobal ? EventBus.Global : null);
 
+        /// <summary>
+        /// Starts the arena over without reloading the scene: the player is restored, enemies,
+        /// bullets and pickups go back to their pools, and the waves begin again from wave 1.
+        /// Each system does its own part when it hears <see cref="ArenaReset"/>.
+        /// </summary>
+        public void ResetArena() => Events.Publish(new ArenaReset());
+
         /// <summary>The arena <paramref name="component"/> is in, or null if it isn't under one.</summary>
         public static Arena Of(Component component) => component.GetComponentInParent<Arena>(includeInactive: true);
 

@@ -8,6 +8,7 @@ using AS.Player;
 using AS.UI;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
@@ -223,12 +224,100 @@ namespace AS.Tests
             Assert.AreEqual(0, spawner.ActiveCount);
             Assert.IsFalse(Object.FindAnyObjectByType<GameOverScreen>().IsVisible);
 
-            // Input must survive the reload (old GameManager disables it, new one re-enables it).
+            // Input must survive the restart (game over turned gameplay input off).
             float startX = player.transform.position.x;
             Press(keyboard.dKey);
             yield return new WaitForSeconds(0.3f);
             Release(keyboard.dKey);
             Assert.Greater(player.transform.position.x, startX + 0.5f, "Player can't move after restart.");
+        }
+
+        [UnityTest]
+        public IEnumerator Restart_MidRun_ResetsTheArenaInPlace_WithoutReloadingTheScene()
+        {
+            yield return LoadArena();
+            var sceneHandle = SceneManager.GetActiveScene().handle;
+            var playerBefore = player;
+            Vector3 startPosition = player.transform.position;
+            var health = player.GetComponent<Health>();
+            var receiver = player.GetComponent<PowerUpReceiver>();
+            var dropper = Object.FindAnyObjectByType<PickupDropper>();
+
+            // Make a mess: score, a hurt and moved player, a shield, enemies, a pickup and bullets in flight.
+            arena.Events.Publish(new EnemyKilled(50, new Vector2(5f, 0f), dropChance: 0f));
+            Assert.AreEqual(50, game.Score);
+            health.TakeDamage(new DamageInfo(1f, Vector2.zero, null));
+            receiver.RaiseShield(10f, "SHIELD");
+            spawner.Spawn(chaserPrefab, startPosition + Vector3.up * 8f);
+            spawner.Spawn(chaserPrefab, startPosition + Vector3.down * 8f);
+            dropper.Spawn(LoadAsset<PowerUp>("Assets/_Project/Data/PowerUps/PowerUp_Shield.asset"), startPosition + Vector3.left * 5f);
+            AimAt(startPosition + Vector3.right * 5f);
+            Press(keyboard.dKey);
+            Press(mouse.leftButton);
+            yield return new WaitForSeconds(0.3f);
+            Release(mouse.leftButton);
+            Release(keyboard.dKey);
+            Assert.Greater(Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None).Length, 0);
+
+            game.Restart();
+            yield return null;
+
+            Assert.AreEqual(sceneHandle, SceneManager.GetActiveScene().handle, "Restart reloaded the scene.");
+            Assert.AreSame(playerBefore, Object.FindAnyObjectByType<PlayerController>(), "Player was replaced.");
+            Assert.IsTrue(game.State.Is(GameState.Playing));
+            Assert.AreEqual(0, game.Score);
+            Assert.AreEqual(health.Max, health.Current);
+            Assert.Less(Vector2.Distance(player.transform.position, startPosition), 0.1f, "Player not back at the start.");
+            Assert.IsFalse(receiver.HasShield, "Shield survived the reset.");
+            Assert.AreEqual(0, spawner.ActiveCount, "Enemies survived the reset.");
+            Assert.AreEqual(0, dropper.ActiveCount, "Pickups survived the reset.");
+            Assert.AreEqual(0, Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None).Length, "Bullets survived the reset.");
+            Assert.IsTrue(director.enabled);
+            Assert.AreEqual(0, director.CurrentWave, "Waves didn't start over.");
+            Assert.AreEqual("", FindText("UI/HUD/PowerUps").text, "HUD still lists the shield.");
+        }
+
+        [UnityTest]
+        public IEnumerator Restart_FromThePauseMenu_ResumesAFreshRun()
+        {
+            yield return LoadArena();
+            game.SetPaused(true);
+            yield return null;
+            Assert.IsTrue(Object.FindAnyObjectByType<PauseMenu>().IsVisible);
+
+            game.Restart();
+            yield return null;
+
+            Assert.IsTrue(game.State.Is(GameState.Playing));
+            Assert.AreEqual(1f, Time.timeScale);
+            Assert.IsFalse(Object.FindAnyObjectByType<PauseMenu>().IsVisible);
+            float startX = player.transform.position.x;
+            Press(keyboard.dKey);
+            yield return new WaitForSeconds(0.3f);
+            Release(keyboard.dKey);
+            Assert.Greater(player.transform.position.x, startX + 0.5f, "Player can't move after restarting from pause.");
+        }
+
+        [UnityTest]
+        public IEnumerator Restart_CutsTheCameraBackToThePlayer_InsteadOfGliding()
+        {
+            yield return LoadArena();
+            var camera = Camera.main.transform;
+            yield return new WaitForSeconds(0.5f);
+            Vector3 startView = camera.position;
+
+            // Off to the side, and long enough for the follow damping to catch up.
+            var body = player.GetComponent<Rigidbody2D>();
+            body.position = new Vector2(12f, 0f);
+            player.transform.position = body.position;
+            yield return new WaitForSeconds(1.5f);
+            Assert.Greater(camera.position.x, startView.x + 2f, "Camera never followed the player.");
+
+            game.Restart();
+            yield return null;
+            yield return null;
+
+            Assert.Less(Vector2.Distance(camera.position, startView), 0.1f, "Camera glided instead of cutting back.");
         }
 
         [UnityTest]

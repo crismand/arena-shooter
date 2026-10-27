@@ -26,6 +26,17 @@ namespace AS.Pickups
         void Awake()
         {
             _events = Arena.EventsFor(this);
+            _events.Subscribe<ArenaReset>(OnArenaReset);
+            if (shieldVisual != null) shieldVisual.SetActive(false);
+        }
+
+        void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
+
+        void OnArenaReset(ArenaReset _)
+        {
+            weapon.SetOverride(null);
+            _weaponBoostEndsAt = 0f;
+            _shieldEndsAt = 0f;
             if (shieldVisual != null) shieldVisual.SetActive(false);
         }
 

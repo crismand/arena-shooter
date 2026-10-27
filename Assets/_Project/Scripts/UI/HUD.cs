@@ -48,6 +48,7 @@ namespace AS.UI
             EventBus.Subscribe<WaveStarted>(OnWaveStarted);
             EventBus.Subscribe<WaveCleared>(OnWaveCleared);
             EventBus.Subscribe<PowerUpActivated>(OnPowerUpActivated);
+            EventBus.Subscribe<ArenaReset>(OnArenaReset);
         }
 
         void OnDisable()
@@ -58,6 +59,7 @@ namespace AS.UI
             EventBus.Unsubscribe<WaveStarted>(OnWaveStarted);
             EventBus.Unsubscribe<WaveCleared>(OnWaveCleared);
             EventBus.Unsubscribe<PowerUpActivated>(OnPowerUpActivated);
+            EventBus.Unsubscribe<ArenaReset>(OnArenaReset);
         }
 
         void Update()
@@ -128,6 +130,15 @@ namespace AS.UI
         void OnWaveCleared(WaveCleared evt) => ShowBanner("WAVE CLEARED");
 
         void OnPowerUpActivated(PowerUpActivated evt) => _powerUpEnds[evt.Label] = Time.time + evt.Duration;
+
+        // Back to how the HUD looks at the start of a run; health and score arrive as their own events.
+        void OnArenaReset(ArenaReset _)
+        {
+            _powerUpEnds.Clear();
+            powerUpText.text = "";
+            waveText.text = "";
+            bannerText.enabled = false;
+        }
 
         void ShowBanner(string message)
         {
