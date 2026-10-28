@@ -24,7 +24,7 @@ Instant restarts and the menus the game was missing. Also shipped the groundwork
 
 ## Next: v1.2.0, the ML-Agents player
 
-Train a reinforcement-learning agent with [Unity ML-Agents](https://github.com/Unity-Technologies/ml-agents) (PPO) to play the arena, and ship it as an "AI plays" mode. Later, use it as an automated playtester for new content. The full plan, agent design and training setup are on the wiki's [ML Agent](https://github.com/crismand/arena-shooter/wiki/ML-Agent) page.
+Train a reinforcement-learning agent with [Unity ML-Agents](https://github.com/Unity-Technologies/ml-agents) (PPO) to play the arena, and ship it as a Watch AI mode. Later, use it as an automated playtester for new content. The full plan, agent design and training setup are on the wiki's [ML Agent](https://github.com/crismand/arena-shooter/wiki/ML-Agent) page.
 
 The first three steps are refactors that more arenas and bosses need anyway, so they came first and shipped in v1.1.0.
 
@@ -33,12 +33,13 @@ The first three steps are refactors that more arenas and bosses need anyway, so 
 | 1. Input seam | An `IPlayerInput` interface between the player and the Input System, so either a person or an agent can drive `PlayerController` and `PlayerAim`. Done. | v1.1.0 |
 | 2. Arena container | An `Arena` root that owns an event channel; gameplay under it publishes there, and it forwards to the global bus unless it's an unwatched training arena. Done. | v1.1.0 |
 | 3. In-place reset | Restart a run without reloading the scene; needed for training episodes and boss retries. Done. | v1.1.0 |
-| 4. ML-Agents package | `com.unity.ml-agents` and a separate `AS.Agents` assembly, so the game's own assemblies never depend on it. | v1.2.0 |
-| 5. Agent and training scene | `ArenaAgent` (ray sensors, move/aim/fire actions, kill and survival rewards) and a stripped-down `Training` scene. | v1.2.0 |
-| 6. Python training | An `ml/` folder with a pinned Python environment, a PPO config, a headless training build, and TensorBoard. | v1.2.0 |
-| 7. AI plays | The trained model shipped with the game, as an attract mode on the title screen or a Watch AI option. | v1.2.0 |
+| 4. ML-Agents package | `com.unity.ml-agents` (the 4.x line for Unity 6, on Inference Engine) and a separate `AS.Agents` assembly, so the game's own assemblies never depend on it. The matching Python `mlagents` version is pinned in the same change. CI only has to resolve the package and never needs Python. | v1.2.0 |
+| 5. Agent and training scene | `ArenaAgent` (ray sensors, move/aim/fire actions, kill and survival rewards), `AgentInput`, and Enemy, EnemyProjectile and Wall tags for the ray sensor. A stripped-down `Training` scene with no `GameManager`, UI, music, screen shake or hit-stop, since `GameManager` and `HitStop` both set the global `Time.timeScale` that training runs at 20; episodes call `Arena.ResetArena()` directly. Tests for the action mapping, the episode reset and the prefab tags. | v1.2.0 |
+| 6. Python training and evaluation | An `ml/` folder with a pinned Python environment, a PPO config, a headless training build (**AS → Build → Training**), and TensorBoard. An evaluation run plays a fixed number of episodes each with the trained, a random and an idle agent and reports mean survival time and kills. | v1.2.0 |
+| 7. Watch AI | The trained model shipped with the game, behind a Watch AI button on the title screen; any input returns to the title. An idle attract mode can come later. | v1.2.0 |
+| 8. Release | README, wiki and roadmap updated, and the v1.2.0 tag. | v1.2.0 |
 
-The ML part is done when the trained agent clearly beats a random agent on survival time and kills, and plays the real arena in the game.
+The ML part is done when, over the evaluation run, the trained agent beats both the random and the idle agent on mean survival time and on mean kills, and plays the real arena in the game.
 
 Later milestones: the agent as a playtester that reports difficulty per wave, room or boss; self-play duels; learning from recorded human play; a curriculum across several arenas.
 
