@@ -1,0 +1,14 @@
+{
+    "name": "AS.Agents",
+    "rootNamespace": "AS.Agents",
+    "references": ["AS.Core", "AS.Player", "Unity.ML-Agents"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
