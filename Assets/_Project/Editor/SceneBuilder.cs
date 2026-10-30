@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using AS.Agents;
 using AS.Combat;
 using AS.Core;
 using AS.Enemies;
@@ -27,14 +28,15 @@ using Object = UnityEngine.Object;
 namespace AS.EditorTools
 {
     /// <summary>
-    /// Builds the Arena scene, placeholder sprites and sounds, prefabs, data assets, the audio
-    /// mixer, physics layers and the extra input actions, and imports TextMesh Pro's essential
-    /// resources if they're missing. Data assets, sprites and sounds are only created if missing, so
-    /// tuning (or a real replacement file) survives a rebuild; the scene and prefabs are regenerated every run.
+    /// Builds the Arena and Training scenes, placeholder sprites and sounds, prefabs, data assets,
+    /// the audio mixer, physics layers, tags and the extra input actions, and imports TextMesh Pro's
+    /// essential resources if they're missing. Data assets, sprites and sounds are only created if
+    /// missing, so tuning (or a real replacement file) survives a rebuild; the scenes and prefabs are
+    /// regenerated every run. The Training scene is in SceneBuilder.Training.cs.
     /// Run from the menu (AS/Setup/Build Arena Scene) or headless:
     ///   -executeMethod AS.EditorTools.SceneBuilder.Run
     /// </summary>
-    public static class SceneBuilder
+    public static partial class SceneBuilder
     {
         const string Root = "Assets/_Project";
         const string InputActionsPath = "Assets/Settings/InputSystem_Actions.inputactions";
@@ -88,6 +90,7 @@ namespace AS.EditorTools
             EnsureFolders("Art/Materials", "Audio/SFX", "Audio/Music", "Prefabs/Effects");
             EnsureTmpEssentials();
             var layers = ConfigurePhysics();
+            foreach (string tag in Tags.All) EnsureTag(tag);
             AddInputActions();
 
             var circle = CreateSprite("Circle", 128, CircleAlpha, FilterMode.Bilinear);
@@ -99,7 +102,7 @@ namespace AS.EditorTools
 
             // Weapons
             var bullet = CreateBulletPrefab("PlayerBullet", PlayerBulletPrefabPath, circle, BulletColor, new Vector2(0.4f, 0.22f), layers.PlayerShot);
-            var enemyBullet = CreateBulletPrefab("EnemyBullet", EnemyBulletPrefabPath, circle, EnemyBulletColor, new Vector2(0.32f, 0.32f), layers.EnemyShot);
+            var enemyBullet = CreateBulletPrefab("EnemyBullet", EnemyBulletPrefabPath, circle, EnemyBulletColor, new Vector2(0.32f, 0.32f), layers.EnemyShot, Tags.EnemyProjectile);
 
             var blaster = CreateAsset(ScriptableObject.CreateInstance<WeaponData>(), Root + "/Data/Weapons/Weapon_Blaster.asset");
             SetRef(blaster, "projectilePrefab", bullet);
@@ -160,7 +163,11 @@ namespace AS.EditorTools
             CreateMixer();
 
             BuildArenaScene(layers);
+            // Last, so the Arena scene is what's left open.
+            BuildTrainingScene(layers);
+            EditorSceneManager.OpenScene(ArenaScenePath);
 
+            // The Training scene stays out of the game build; the training build adds it itself.
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ArenaScenePath, true) };
             AssetDatabase.SaveAssets();
             Debug.Log("[SceneBuilder] Done. Open Assets/_Project/Scenes/Arena.unity and press Play.");
@@ -229,6 +236,18 @@ namespace AS.EditorTools
                 return i;
             }
             throw new InvalidOperationException("No free user layer for " + layerName);
+        }
+
+        static void EnsureTag(string tagName)
+        {
+            var tagManager = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]);
+            var tags = tagManager.FindProperty("tags");
+            for (int i = 0; i < tags.arraySize; i++)
+                if (tags.GetArrayElementAtIndex(i).stringValue == tagName) return;
+
+            tags.InsertArrayElementAtIndex(tags.arraySize);
+            tags.GetArrayElementAtIndex(tags.arraySize - 1).stringValue = tagName;
+            tagManager.ApplyModifiedPropertiesWithoutUndo();
         }
 
         static void AddInputActions()
@@ -381,9 +400,9 @@ namespace AS.EditorTools
             return AssetDatabase.LoadAssetAtPath<Sprite>(path);
         }
 
-        static Projectile CreateBulletPrefab(string name, string path, Sprite circle, Color color, Vector2 size, int layer)
+        static Projectile CreateBulletPrefab(string name, string path, Sprite circle, Color color, Vector2 size, int layer, string tag = "Untagged")
         {
-            var go = new GameObject(name) { layer = layer };
+            var go = new GameObject(name) { layer = layer, tag = tag };
             go.transform.localScale = new Vector3(size.x, size.y, 1f);
 
             var sr = go.AddComponent<SpriteRenderer>();
@@ -411,7 +430,7 @@ namespace AS.EditorTools
                                          float size, float radius, float mass, LayerSet layers,
                                          Action<T, Transform> extra = null) where T : EnemyBase
         {
-            var go = new GameObject(name) { layer = layers.Enemy };
+            var go = new GameObject(name) { layer = layers.Enemy, tag = Tags.Enemy };
 
             var body = go.AddComponent<Rigidbody2D>();
             body.gravityScale = 0f;
@@ -440,7 +459,7 @@ namespace AS.EditorTools
 
         static void CreatePickupPrefab(Sprite square, Sprite circle, int layer)
         {
-            var go = new GameObject("Pickup") { layer = layer };
+            var go = new GameObject("Pickup") { layer = layer, tag = Tags.Pickup };
             go.AddComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Kinematic;
             var trigger = go.AddComponent<CircleCollider2D>();
             trigger.isTrigger = true;
@@ -616,15 +635,11 @@ namespace AS.EditorTools
             var weapon = AssetDatabase.LoadAssetAtPath<WeaponData>(Root + "/Data/Weapons/Weapon_Blaster.asset");
             var circle = AssetDatabase.LoadAssetAtPath<Sprite>(Root + "/Art/Sprites/Circle.png");
             var square = AssetDatabase.LoadAssetAtPath<Sprite>(Root + "/Art/Sprites/Square.png");
-            var waves = new Object[AuthoredWaves.Length];
-            for (int i = 0; i < waves.Length; i++) waves[i] = AssetDatabase.LoadAssetAtPath<WaveDefinition>(WavePath(i));
 
             var gameManager = new GameObject("GameManager").AddComponent<GameManager>();
             SetRef(gameManager, "input", input);
 
-            var light = new GameObject("Global Light 2D").AddComponent<Light2D>();
-            light.lightType = Light2D.LightType.Global;
-            light.intensity = 1f;
+            BuildGlobalLight();
 
             // Everything that plays the game lives under the Arena root and uses its events; the
             // camera, feedback and UI stay outside and listen on the global bus.
@@ -633,9 +648,29 @@ namespace AS.EditorTools
             var player = BuildPlayer(input, weapon, circle, square, layers.Player);
             player.transform.SetParent(arena.transform, false);
             BuildCamera(player.transform, cameraBounds);
-            var spawner = BuildSpawner(player.transform);
+            BuildGameplay(arena, player.transform);
+
+            BuildFeedback();
+            BuildUI(gameManager, square);
+
+            EditorSceneManager.SaveScene(scene, ArenaScenePath);
+        }
+
+        static void BuildGlobalLight()
+        {
+            var light = new GameObject("Global Light 2D").AddComponent<Light2D>();
+            light.lightType = Light2D.LightType.Global;
+            light.intensity = 1f;
+        }
+
+        /// <summary>The enemy spawner, wave director and pickup dropper, under <paramref name="arena"/>.</summary>
+        static void BuildGameplay(Arena arena, Transform player)
+        {
+            var spawner = BuildSpawner(player);
             spawner.transform.SetParent(arena.transform, false);
 
+            var waves = new Object[AuthoredWaves.Length];
+            for (int i = 0; i < waves.Length; i++) waves[i] = AssetDatabase.LoadAssetAtPath<WaveDefinition>(WavePath(i));
             var director = new GameObject("WaveDirector").AddComponent<WaveDirector>();
             director.transform.SetParent(arena.transform, false);
             SetRef(director, "spawner", spawner);
@@ -647,11 +682,6 @@ namespace AS.EditorTools
             dropper.transform.SetParent(arena.transform, false);
             SetRef(dropper, "pickupPrefab", AssetDatabase.LoadAssetAtPath<Pickup>(PickupPrefabPath));
             SetList(dropper, "powerUps", powerUps);
-
-            BuildFeedback();
-            BuildUI(gameManager, square);
-
-            EditorSceneManager.SaveScene(scene, ArenaScenePath);
         }
 
         /// <summary>Screen shake, hit-stop, particles, sound effects and music: all driven by events.</summary>
@@ -770,7 +800,9 @@ namespace AS.EditorTools
             return arenaRoot;
         }
 
-        static GameObject BuildPlayer(InputReader input, WeaponData weaponData, Sprite circle, Sprite square, int layer)
+        /// <summary>The player, driven by keyboard, mouse and gamepad, or by an agent when <paramref name="agentControlled"/>.</summary>
+        static GameObject BuildPlayer(InputReader input, WeaponData weaponData, Sprite circle, Sprite square, int layer,
+                                      bool agentControlled = false)
         {
             var player = new GameObject("Player") { layer = layer };
 
@@ -811,8 +843,10 @@ namespace AS.EditorTools
             SetRef(receiver, "health", health);
             SetRef(receiver, "shieldVisual", shield);
 
-            var humanInput = player.AddComponent<HumanPlayerInput>();
-            SetRef(humanInput, "input", input);
+            if (agentControlled)
+                player.AddComponent<AgentInput>();
+            else
+                SetRef(player.AddComponent<HumanPlayerInput>(), "input", input);
 
             var aim = player.AddComponent<PlayerAim>();
             SetRef(aim, "pivot", pivot);
@@ -1141,6 +1175,7 @@ namespace AS.EditorTools
         {
             var go = Quad(name, parent, position, size, square, WallColor, 0);
             go.layer = layer;
+            go.tag = Tags.Wall;
             go.AddComponent<BoxCollider2D>();
         }
 
