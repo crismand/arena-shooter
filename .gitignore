@@ -83,3 +83,10 @@ crashlytics-build.properties
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# ---------------------------------------------------------------------------
+# ML-Agents training (ml/)
+# ---------------------------------------------------------------------------
+/ml/.venv/
+/ml/results/
+__pycache__/
