@@ -124,6 +124,15 @@ namespace AS.Tests
         }
 
         [Test]
+        public void TheTrainedModel_ShipsWithTheGame()
+        {
+            // Imported by Inference Engine as a ModelAsset, which Watch AI plays with.
+            var model = AssetDatabase.LoadMainAssetAtPath($"{Root}/Models/ArenaAgent.onnx");
+            Assert.IsNotNull(model, "No model at Models/ArenaAgent.onnx. Copy one in from ml/results.");
+            Assert.AreEqual("ModelAsset", model.GetType().Name);
+        }
+
+        [Test]
         public void BuildSettings_StartWithTheArenaScene()
         {
             var enabled = EditorBuildSettings.scenes.Where(s => s.enabled).ToArray();

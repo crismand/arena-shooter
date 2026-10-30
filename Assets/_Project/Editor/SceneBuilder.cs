@@ -645,10 +645,11 @@ namespace AS.EditorTools
             // camera, feedback and UI stay outside and listen on the global bus.
             var arena = BuildArena(square, layers.Wall, out var cameraBounds);
             SetRef(gameManager, "arena", arena);
-            var player = BuildPlayer(input, weapon, circle, square, layers.Player);
+            var player = BuildPlayer(input, weapon, circle, square, layers.Player, agentInput: true);
             player.transform.SetParent(arena.transform, false);
             BuildCamera(player.transform, cameraBounds);
             BuildGameplay(arena, player.transform);
+            BuildWatchMode(arena, player, layers);
 
             BuildFeedback();
             BuildUI(gameManager, square);
@@ -800,9 +801,13 @@ namespace AS.EditorTools
             return arenaRoot;
         }
 
-        /// <summary>The player, driven by keyboard, mouse and gamepad, or by an agent when <paramref name="agentControlled"/>.</summary>
+        /// <summary>
+        /// The player, driven by keyboard, mouse and gamepad when there's an <paramref name="input"/>, and
+        /// able to take commands from an agent when <paramref name="agentInput"/>. With both, the human
+        /// input comes first, so it's the one the player picks up by default.
+        /// </summary>
         static GameObject BuildPlayer(InputReader input, WeaponData weaponData, Sprite circle, Sprite square, int layer,
-                                      bool agentControlled = false)
+                                      bool agentInput = false)
         {
             var player = new GameObject("Player") { layer = layer };
 
@@ -843,10 +848,8 @@ namespace AS.EditorTools
             SetRef(receiver, "health", health);
             SetRef(receiver, "shieldVisual", shield);
 
-            if (agentControlled)
-                player.AddComponent<AgentInput>();
-            else
-                SetRef(player.AddComponent<HumanPlayerInput>(), "input", input);
+            if (input != null) SetRef(player.AddComponent<HumanPlayerInput>(), "input", input);
+            if (agentInput) player.AddComponent<AgentInput>();
 
             var aim = player.AddComponent<PlayerAim>();
             SetRef(aim, "pivot", pivot);
@@ -944,13 +947,21 @@ namespace AS.EditorTools
             var titleBest = UIText("Best", titleScreen.transform, "", 40, TextAlignmentOptions.Center);
             Anchor(titleBest.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 110f), new Vector2(800f, 60f));
             var play = UIButton("Play", titleScreen.transform, square, new Vector2(0f, -10f));
-            var titleSettings = UIButton("Settings", titleScreen.transform, square, new Vector2(0f, -100f));
-            var titleQuit = UIButton("Quit", titleScreen.transform, square, new Vector2(0f, -190f));
+            var watch = UIButton("Watch AI", titleScreen.transform, square, new Vector2(0f, -100f));
+            var titleSettings = UIButton("Settings", titleScreen.transform, square, new Vector2(0f, -190f));
+            var titleQuit = UIButton("Quit", titleScreen.transform, square, new Vector2(0f, -280f));
             UnityEventTools.AddPersistentListener(play.onClick, gameManager.Play);
+            UnityEventTools.AddPersistentListener(watch.onClick, gameManager.WatchAI);
             UnityEventTools.AddObjectPersistentListener<UIPanel>(titleSettings.onClick, settings.Open, titleScreen);
             UnityEventTools.AddPersistentListener(titleQuit.onClick, gameManager.Quit);
             SetRef(titleScreen, "bestText", titleBest);
             SetRef(titleScreen, "firstSelected", play.gameObject);
+
+            // Watching the AI: a line at the bottom over the game, which stays in view.
+            var watchOverlay = Panel<WatchOverlay>("WatchOverlay", canvas, square, Color.clear);
+            var watchLine = UIText("Hint", watchOverlay.transform, "AI PLAYING  -  PRESS ANY BUTTON TO RETURN", 34, TextAlignmentOptions.Bottom);
+            watchLine.color = new Color(PanelTextColor.r, PanelTextColor.g, PanelTextColor.b, 0.8f);
+            Anchor(watchLine.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(1400f, 60f));
 
             // Pause menu
             var pause = Panel<PauseMenu>("PauseMenu", canvas, square, new Color(0f, 0f, 0f, 0.65f));
@@ -1090,7 +1101,7 @@ namespace AS.EditorTools
 
         static Button UIButton(string label, Transform parent, Sprite square, Vector2 position)
         {
-            var go = UIElement(label + "Button", parent);
+            var go = UIElement(label.Replace(" ", "") + "Button", parent);
             Anchor(go.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), position, new Vector2(360f, 70f));
             var image = go.AddComponent<Image>();
             image.sprite = square;
