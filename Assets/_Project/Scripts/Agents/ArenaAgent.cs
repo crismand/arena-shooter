@@ -20,6 +20,10 @@ namespace AS.Agents
     public class ArenaAgent : Agent
     {
         public const string Behavior = "ArenaAgent";
+        /// <summary>Per-episode stats, reported when the next episode begins: in TensorBoard and to evaluate.py.</summary>
+        public const string SurvivalStat = "Arena/Survival Time";
+        public const string KillsStat = "Arena/Kills";
+        public const string DiedStat = "Arena/Died";
         /// <summary>Position (2), velocity (2), health (1), aim (2), cooldown (1).</summary>
         public const int VectorObservationSize = 8;
         /// <summary>Move x/y and aim x/y, continuous; fire or hold, one discrete branch of two.</summary>
@@ -49,6 +53,11 @@ namespace AS.Agents
         [SerializeField] HeuristicMode heuristic = HeuristicMode.Random;
 
         bool _died;
+        // The episode in progress, for its stats.
+        bool _episodeRunning;
+        float _episodeStart;
+        int _kills;
+        bool _diedThisEpisode;
 
         protected override void OnEnable()
         {
@@ -68,6 +77,13 @@ namespace AS.Agents
 
         public override void OnEpisodeBegin()
         {
+            // Episodes end by death (EndEpisode) or by running out of steps (MaxStep); both land here.
+            if (_episodeRunning) ReportEpisode();
+            _episodeRunning = true;
+            _episodeStart = Time.time;
+            _kills = 0;
+            _diedThisEpisode = false;
+
             _died = false;
             input.Clear();
             arena.ResetArena();
@@ -113,13 +129,28 @@ namespace AS.Agents
             transform.position = body.position;
         }
 
-        void OnEnemyKilled(EnemyKilled _) => AddReward(killReward);
+        /// <summary>Game seconds survived (not real ones, so the time scale doesn't matter), kills, and 1 if it died.</summary>
+        void ReportEpisode()
+        {
+            var stats = Academy.Instance.StatsRecorder;
+            stats.Add(SurvivalStat, Time.time - _episodeStart);
+            stats.Add(KillsStat, _kills);
+            stats.Add(DiedStat, _diedThisEpisode ? 1f : 0f);
+        }
+
+        void OnEnemyKilled(EnemyKilled _)
+        {
+            _kills++;
+            AddReward(killReward);
+        }
+
         void OnPlayerDamaged(PlayerDamaged _) => AddReward(hitPenalty);
 
         void OnPlayerDied(PlayerDied _)
         {
             AddReward(deathPenalty);
             _died = true;
+            _diedThisEpisode = true;
         }
     }
 }

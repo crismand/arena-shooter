@@ -6,13 +6,13 @@ Python side of the ML-Agents player: training config, scripts and the pinned env
 
 | Unity package | Python package | Python | PyTorch |
 |---|---|---|---|
-| `com.unity.ml-agents` 4.1.0 | `mlagents` 1.1.0 | 3.10.12 | 2.5.1 (CUDA 12.1) |
+| `com.unity.ml-agents` 4.1.0 | `mlagents` 1.1.0 | 3.10.11 | 2.5.1 (CUDA 12.1) |
 
 The Unity and Python packages are released in pairs, so upgrade them together: `Packages/manifest.json` and `requirements.txt` in the same change. The pairs are listed in the ML-Agents installation docs.
 
 ## Setup
 
-Install Python 3.10.12, then from the repo root:
+Install Python 3.10 (3.10.11 is the last release with a Windows installer; `mlagents` supports 3.10.1 to 3.10.12), then from the repo root:
 
 ```powershell
 py -3.10 -m venv ml/.venv
