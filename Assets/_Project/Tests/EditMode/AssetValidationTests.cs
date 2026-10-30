@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using AS.Combat;
+using AS.Core;
 using AS.Enemies;
 using AS.Feedback;
 using AS.Pickups;
@@ -96,6 +97,30 @@ namespace AS.Tests
             Assert.IsFalse(particles.main.playOnAwake);
             Assert.AreEqual(ParticleSystemStopAction.Callback, particles.main.stopAction);
             Assert.IsNotNull(effect.GetComponent<ParticleSystemRenderer>().sharedMaterial, "No material: it would render pink.");
+        }
+
+        [Test]
+        public void TheSensorTags_AreDefined()
+        {
+            foreach (string tag in Tags.All)
+                CollectionAssert.Contains(UnityEditorInternal.InternalEditorUtility.tags, tag);
+        }
+
+        [TestCaseSource(nameof(Enemies))]
+        public void EnemyPrefab_IsTaggedForTheSensor(EnemyBase enemy) => Assert.AreEqual(Tags.Enemy, enemy.tag);
+
+        [Test]
+        public void EnemyBullet_AndPickup_AreTaggedForTheSensor()
+        {
+            Assert.AreEqual(Tags.EnemyProjectile, AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/Prefabs/Projectiles/EnemyBullet.prefab").tag);
+            Assert.AreEqual(Tags.Pickup, AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/Prefabs/Pickups/Pickup.prefab").tag);
+        }
+
+        [Test]
+        public void TheTrainingScene_Exists_ButIsNotInTheGameBuild()
+        {
+            Assert.IsNotNull(AssetDatabase.LoadAssetAtPath<SceneAsset>($"{Root}/Scenes/Training.unity"));
+            Assert.IsFalse(EditorBuildSettings.scenes.Any(s => s.path.EndsWith("/Training.unity")));
         }
 
         [Test]

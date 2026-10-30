@@ -24,6 +24,9 @@ namespace AS.Combat
         /// <summary>The data currently in use: the override if one is set, otherwise the base weapon.</summary>
         public WeaponData Data => _override != null ? _override : data;
 
+        /// <summary>Seconds until the weapon can fire again; zero when it's ready.</summary>
+        public float Cooldown => Mathf.Max(0f, _nextShotTime - Time.time);
+
         void Awake()
         {
             if (muzzle == null) muzzle = transform;
