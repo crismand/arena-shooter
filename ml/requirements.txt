@@ -6,3 +6,6 @@
 --extra-index-url https://download.pytorch.org/whl/cu121
 torch==2.5.1
 mlagents==1.1.0
+
+# evaluate.py runs exported models with this. 1.19 is the last line built for NumPy 1.x.
+onnxruntime==1.19.2
