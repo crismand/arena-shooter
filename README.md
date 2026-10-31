@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/crismand/arena-shooter/actions/workflows/tests.yml/badge.svg?branch=dev)](https://github.com/crismand/arena-shooter/actions/workflows/tests.yml)
 
-A top-down twin-stick shooter made in Unity 6.3. Survive wave after wave of enemies in a single arena, grab power-ups, and chase a high score.
+A top-down twin-stick shooter made in Unity 6.3. Survive wave after wave of enemies in a single arena, grab power-ups, and chase a high score. Or sit back and watch a reinforcement-learning agent, trained with Unity ML-Agents, play it for you.
 
 ![Gameplay: the player in the arena after clearing wave 1](media/gameplay.png)
 
@@ -27,6 +27,7 @@ Download the latest Windows build from [Releases](https://github.com/crismand/ar
 - **Game feel.** Screen shake, hit-stop, particle bursts, sound effects and music.
 - **High score.** Saved between sessions, shown on the title screen, the HUD and the game over screen.
 - **Menus.** A title screen, instant restarts, and settings for music and effects volume and fullscreen.
+- **Watch AI.** A trained ML-Agents model plays the arena from the title screen; press any button to take over again.
 
 ![Game over screen with score, wave reached, best score, and Restart and Quit buttons](media/game-over.png)
 
@@ -35,7 +36,7 @@ Download the latest Windows build from [Releases](https://github.com/crismand/ar
 ### Requirements
 
 - Unity **6000.3.26f1** (6.3 LTS)
-- [Git LFS](https://git-lfs.com/): sprites, sounds and the font atlas are stored with LFS. Run `git lfs install` once before cloning.
+- [Git LFS](https://git-lfs.com/): sprites, sounds, the font atlas and the trained model are stored with LFS. Run `git lfs install` once before cloning.
 
 ### Getting started
 
@@ -44,16 +45,30 @@ Download the latest Windows build from [Releases](https://github.com/crismand/ar
 
 ### How it's put together
 
-All game code is in `Assets/_Project/Scripts`, split into assemblies (`AS.Core`, `AS.Combat`, `AS.Player`, `AS.Enemies`, `AS.Waves`, `AS.Pickups`, `AS.Feedback`, `AS.UI`). Systems don't reference each other directly: they publish and listen to events through `AS.Core.EventBus`. Tuning lives in ScriptableObject assets under `Assets/_Project/Data`.
+All game code is in `Assets/_Project/Scripts`, split into assemblies (`AS.Core`, `AS.Combat`, `AS.Player`, `AS.Enemies`, `AS.Waves`, `AS.Pickups`, `AS.Feedback`, `AS.UI`), plus `AS.Agents` for the ML-Agents player, which no game assembly references. Systems don't reference each other directly: they publish and listen to events through `AS.Core.EventBus`. Tuning lives in ScriptableObject assets under `Assets/_Project/Data`.
 
 The scene, prefabs, placeholder sprites and sounds, audio mixer and physics layers are all **generated from code** by `Assets/_Project/Editor/SceneBuilder.cs`. To regenerate them, use the menu **AS → Setup → Build Arena Scene**. Data assets, sprites and sounds are only created if missing, so your tuning survives a rebuild. The scene and prefabs are rebuilt every time, so put permanent changes to them in `SceneBuilder`.
+
+### The ML agent
+
+`ArenaAgent` plays the player through the same `IPlayerInput` seam as a person. It sees the arena through 2D ray sensors and its own position, velocity, health, aim and cooldown, and is rewarded for kills and for staying alive. It was trained with PPO in a headless training build; `ml/` has the pinned Python environment, the config, `train.ps1` and `evaluate.py` (see [ml/README.md](ml/README.md)). The shipped model, `Assets/_Project/Models/ArenaAgent.onnx`, runs on Inference Engine in the game, with no Python needed.
+
+Over 50 evaluation episodes each:
+
+| Policy | Survival | Kills | Died |
+|---|---|---|---|
+| Idle | 9.3 s | 0 | 100% |
+| Random | 13.7 s | 2.6 | 100% |
+| Trained (`m1_001`, 2M steps) | 48.6 s | 11.5 | 48% |
+
+The design, training setup and what's next for the agent are on the wiki's [ML Agent](https://github.com/crismand/arena-shooter/wiki/ML-Agent) page.
 
 ### Tests
 
 The tests live in `Assets/_Project/Tests`. Run them from **Window → General → Test Runner**:
 
-- **EditMode** (`AS.Tests.EditMode`): the event bus and arena channels, state machine, high score and settings storage, wave scaling and object pool, plus checks that every data asset and prefab is wired up correctly.
-- **PlayMode** (`AS.Tests.PlayMode`): play the real scene with simulated keyboard and mouse input.
+- **EditMode** (`AS.Tests.EditMode`): the event bus and arena channels, state machine, high score and settings storage, wave scaling and object pool, the agent's action mapping, plus checks that every data asset and prefab is wired up correctly and that no game assembly depends on ML-Agents.
+- **PlayMode** (`AS.Tests.PlayMode`): play the real scene with simulated keyboard and mouse input, plus the training scene's episodes and Watch AI.
 
 They can also run headless with the editor closed:
 
@@ -100,10 +115,10 @@ The `.ulf` file appears after activating a Personal license in Unity Hub (Prefer
 1. Merge `dev` into `main` through a pull request (the tests must pass).
 2. Tag the merge commit on `main` and push the tag:
    ```bash
-   git tag -a v1.1.0 -m "Arena Shooter v1.1.0"
-   git push origin v1.1.0
+   git tag -a v1.2.0 -m "Arena Shooter v1.2.0"
+   git push origin v1.2.0
    ```
-3. The Release workflow tests, builds and creates a draft release with `ArenaShooter-v1.1.0-windows-x64.zip`. Edit the notes on GitHub, then press **Publish release**.
+3. The Release workflow tests, builds and creates a draft release with `ArenaShooter-v1.2.0-windows-x64.zip`. Edit the notes on GitHub, then press **Publish release**.
 
 ## Roadmap
 
