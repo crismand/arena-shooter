@@ -17,6 +17,7 @@
         "AS.UI",
         "AS.Waves",
         "Unity.ML-Agents",
+        "Unity.InferenceEngine",
         "AS.Agents"
     ],
     "includePlatforms": [],
