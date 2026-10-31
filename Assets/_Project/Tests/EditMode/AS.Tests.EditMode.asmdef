@@ -9,7 +9,8 @@
         "AS.Enemies",
         "AS.Feedback",
         "AS.Pickups",
-        "AS.Waves"
+        "AS.Waves",
+        "AS.Agents"
     ],
     "includePlatforms": ["Editor"],
     "excludePlatforms": [],

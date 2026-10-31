@@ -5,8 +5,9 @@ namespace AS.Core
 {
     /// <summary>
     /// Owns the run: game state, input, pausing, score, high score and restart. Lives in the Arena
-    /// scene. The game opens on the title screen with the arena frozen behind it; Play starts a run.
-    /// A restart resets the <see cref="arena"/> in place instead of reloading the scene.
+    /// scene. The game opens on the title screen with the arena frozen behind it; Play starts a run,
+    /// and Watch AI hands the arena to the trained agent until any button is pressed. A restart
+    /// resets the <see cref="arena"/> in place instead of reloading the scene.
     /// </summary>
     [DefaultExecutionOrder(-1000)]
     public class GameManager : MonoBehaviour
@@ -16,11 +17,15 @@ namespace AS.Core
         [SerializeField] Arena arena;
         [Tooltip("Open on the title screen. Off starts a run straight away.")]
         [SerializeField] bool showTitle = true;
+        [Tooltip("Seconds after Watch AI before a button press returns to the title, so the press that chose it can't.")]
+        [SerializeField, Min(0f)] float watchExitDelay = 0.5f;
 
         public GameStateMachine State { get; } = new();
         public int Score { get; private set; }
         /// <summary>Best score before this run, or this run's score once game over saves a new record.</summary>
         public int HighScore { get; private set; }
+
+        float _watchStartTime;
 
         void OnEnable()
         {
@@ -36,6 +41,7 @@ namespace AS.Core
             input.Disable();
             EventBus.Unsubscribe<PlayerDied>(OnPlayerDied);
             EventBus.Unsubscribe<EnemyKilled>(OnEnemyKilled);
+            input.AnyButtonPressed -= OnButtonWhileWatching;
         }
 
         void Start()
@@ -51,6 +57,28 @@ namespace AS.Core
             input.GameplayEnabled = false;
             ResetScore();
             State.ChangeState(GameState.Title);
+        }
+
+        /// <summary>For UI buttons. From the title screen, the agent plays a fresh arena until any button is pressed.</summary>
+        public void WatchAI()
+        {
+            if (!State.Is(GameState.Title)) return;
+            if (arena != null) arena.ResetArena();
+            Time.timeScale = 1f;
+            input.GameplayEnabled = false;
+            ResetScore();
+            _watchStartTime = Time.unscaledTime;
+            input.AnyButtonPressed += OnButtonWhileWatching;
+            State.ChangeState(GameState.Watching);
+        }
+
+        void OnButtonWhileWatching()
+        {
+            if (!State.Is(GameState.Watching) || Time.unscaledTime < _watchStartTime + watchExitDelay) return;
+            input.AnyButtonPressed -= OnButtonWhileWatching;
+            // State first, so the agent lets go of the player before the arena resets behind the title.
+            ShowTitle();
+            if (arena != null) arena.ResetArena();
         }
 
         void BeginRun()
@@ -120,6 +148,12 @@ namespace AS.Core
 
         void OnPlayerDied(PlayerDied _)
         {
+            // The agent starts its next go by itself; nothing is recorded.
+            if (State.Is(GameState.Watching))
+            {
+                ResetScore();
+                return;
+            }
             input.GameplayEnabled = false;
             // Before the state change, so the game over screen already knows about the record.
             if (HighScoreStore.TrySubmit(Score))
@@ -132,7 +166,7 @@ namespace AS.Core
 
         void OnEnemyKilled(EnemyKilled evt)
         {
-            if (!State.Is(GameState.Playing)) return;
+            if (!State.Is(GameState.Playing) && !State.Is(GameState.Watching)) return;
             Score += evt.ScoreValue;
             EventBus.Publish(new ScoreChanged(Score));
         }

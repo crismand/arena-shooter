@@ -1,0 +1,11 @@
+# ML-Agents Python side, paired with com.unity.ml-agents 4.1.0 in Packages/manifest.json.
+# Needs Python 3.10 (mlagents 1.1.0 supports 3.10.1 to 3.10.12). Upgrade both sides together.
+#
+# PyTorch comes from the CUDA 12.1 index for the GPU. ML-Agents supports 2.1.1 to 2.8.0;
+# 2.9 and later break ONNX model export.
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1
+mlagents==1.1.0
+
+# evaluate.py runs exported models with this. 1.19 is the last line built for NumPy 1.x.
+onnxruntime==1.19.2

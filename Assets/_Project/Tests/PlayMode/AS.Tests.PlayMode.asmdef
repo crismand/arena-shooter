@@ -15,7 +15,10 @@
         "AS.Pickups",
         "AS.Player",
         "AS.UI",
-        "AS.Waves"
+        "AS.Waves",
+        "Unity.ML-Agents",
+        "Unity.InferenceEngine",
+        "AS.Agents"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

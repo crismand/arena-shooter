@@ -7,6 +7,8 @@ namespace AS.Core
         Playing,
         Paused,
         GameOver,
+        /// <summary>The trained agent plays while the player watches; any button returns to the title.</summary>
+        Watching,
     }
 
     /// <summary>Top-level game state. Every change is broadcast as a <see cref="GameStateChanged"/> event.</summary>

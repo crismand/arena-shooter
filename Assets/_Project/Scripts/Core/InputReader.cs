@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 
 namespace AS.Core
 {
@@ -23,6 +24,27 @@ namespace AS.Core
         InputAction _pause;
 
         public event Action PausePressed;
+
+        Action _anyButtonPressed;
+
+        /// <summary>
+        /// Any button on any device pressed: keys, mouse buttons, gamepad buttons and triggers, but not
+        /// mouse movement. Ignores <see cref="GameplayEnabled"/>. Only listens to the Input System while
+        /// something is subscribed.
+        /// </summary>
+        public event Action AnyButtonPressed
+        {
+            add
+            {
+                if (_anyButtonPressed == null) InputSystem.onEvent += OnInputEvent;
+                _anyButtonPressed += value;
+            }
+            remove
+            {
+                _anyButtonPressed -= value;
+                if (_anyButtonPressed == null) InputSystem.onEvent -= OnInputEvent;
+            }
+        }
 
         /// <summary>When false, movement, aim and fire read as idle (pause still fires).</summary>
         public bool GameplayEnabled { get; set; } = true;
@@ -62,6 +84,11 @@ namespace AS.Core
             _map?.Disable();
             _map = null;
             _move = _aim = _point = _fire = _pause = null;
+        }
+
+        void OnInputEvent(InputEventPtr eventPtr, InputDevice _)
+        {
+            if (eventPtr.GetFirstButtonPressOrNull() != null) _anyButtonPressed?.Invoke();
         }
 
         void OnPause(InputAction.CallbackContext _) => PausePressed?.Invoke();
