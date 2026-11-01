@@ -7,8 +7,8 @@ namespace AS.UI
 {
     /// <summary>
     /// A short field guide: one page of enemies and one of pickups, each showing for
-    /// <see cref="pageDuration"/> seconds or until any button is pressed. Shown before the very first
-    /// run (Play on the title goes through <see cref="PlayFromTitle"/>), and any time from the title's
+    /// <see cref="pageDuration"/> seconds or until any button is pressed. Shown before the first
+    /// game of each launch (Play on the title goes through <see cref="PlayFromTitle"/>), and any time from the title's
     /// Guide button. Runs on unscaled time, since the title screen freezes the game.
     /// </summary>
     public class GuideScreen : UIPanel

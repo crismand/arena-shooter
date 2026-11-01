@@ -50,6 +50,7 @@ namespace AS.EditorTools
         const string DasherPrefabPath = Root + "/Prefabs/Enemies/Dasher.prefab";
         const string SplitterPrefabPath = Root + "/Prefabs/Enemies/Splitter.prefab";
         const string SplitlingPrefabPath = Root + "/Prefabs/Enemies/Splitling.prefab";
+        const string BossPrefabPath = Root + "/Prefabs/Enemies/Boss.prefab";
         const string PickupPrefabPath = Root + "/Prefabs/Pickups/Pickup.prefab";
         const string TmpFontPath = "Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset";
         const string MixerPath = Root + "/Audio/ArenaMixer.mixer";
@@ -93,6 +94,8 @@ namespace AS.EditorTools
         static readonly Color DasherColor = new(1f, 0.62f, 0.18f);
         static readonly Color SplitterColor = new(0.42f, 0.86f, 0.46f);
         static readonly Color SplitlingColor = new(0.66f, 1f, 0.6f);
+        static readonly Color BossColor = new(0.86f, 0.24f, 0.6f);
+        static readonly Color BossCoreColor = new(1f, 0.85f, 0.4f);
         static readonly Color EnemyBulletColor = new(1f, 0.45f, 0.85f);
         static readonly Color HomingBulletColor = new(0.78f, 0.58f, 1f);
         static readonly Color ShieldColor = new(0.45f, 0.8f, 1f, 0.35f);
@@ -153,6 +156,22 @@ namespace AS.EditorTools
                 SetFloat(w, "projectileLifetime", 3f);
             });
             SetRef(enemyBlaster, "projectilePrefab", enemyBullet);
+            // Rings are slow so there's time to find a gap. Later bosses add bursts: a quicker aimed three-way spread.
+            var bossRing = CreateOrLoad<WeaponData>(Root + "/Data/Weapons/Weapon_BossRing.asset", w =>
+            {
+                SetFloat(w, "projectileSpeed", 6f);
+                SetFloat(w, "projectileLifetime", 6f);
+            });
+            SetRef(bossRing, "projectilePrefab", enemyBullet);
+            var bossBurst = CreateOrLoad<WeaponData>(Root + "/Data/Weapons/Weapon_BossBurst.asset", w =>
+            {
+                SetFloat(w, "fireRate", 2f);
+                SetFloat(w, "projectileSpeed", 10f);
+                SetFloat(w, "projectileLifetime", 3f);
+                SetInt(w, "projectileCount", 3);
+                SetFloat(w, "spreadAngle", 30f);
+            });
+            SetRef(bossBurst, "projectilePrefab", enemyBullet);
 
             // Enemies
             var chaserData = CreateAsset(ScriptableObject.CreateInstance<EnemyData>(), Root + "/Data/Enemies/Enemy_Chaser.asset");
@@ -162,6 +181,8 @@ namespace AS.EditorTools
                 SetEnemyStats(d, health: 12f, speed: 1.6f, acceleration: 6f, contactDamage: 2f, score: 50, dropChance: 0.5f));
             var dasherData = CreateOrLoad<EnemyData>(Root + "/Data/Enemies/Enemy_Dasher.asset", d =>
                 SetEnemyStats(d, health: 3f, speed: 2.5f, acceleration: 12f, contactDamage: 1f, score: 30, dropChance: 0.12f));
+            var bossData = CreateOrLoad<EnemyData>(Root + "/Data/Enemies/Enemy_Boss.asset", d =>
+                SetEnemyStats(d, health: 60f, speed: 1.4f, acceleration: 5f, contactDamage: 2f, score: 500, dropChance: 1f));
             var splitterData = CreateOrLoad<EnemyData>(Root + "/Data/Enemies/Enemy_Splitter.asset", d =>
                 SetEnemyStats(d, health: 6f, speed: 1.8f, acceleration: 8f, contactDamage: 1f, score: 40, dropChance: 0.2f));
             // Score and drops come mostly from the Splitter itself; its three children are worth little.
@@ -196,6 +217,21 @@ namespace AS.EditorTools
                     Quad("Lobe", visual, new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * 0.22f, new Vector2(0.3f, 0.3f), circle, Color.Lerp(SplitterColor, Color.white, 0.45f), 9);
                 }
                 SetRef(splitter, "childPrefab", AssetDatabase.LoadAssetAtPath<EnemyBase>(SplitlingPrefabPath));
+            });
+            CreateEnemyPrefab<Boss>("Boss", BossPrefabPath, bossData, circle, BossColor, 2.6f, 1.25f, 20f, layers, (boss, visual) =>
+            {
+                // Children of the 2.6-unit visual, so sizes here are fractions of the body.
+                Quad("Barrel", visual, new Vector2(0.5f, 0f), new Vector2(0.3f, 0.14f), square, Color.Lerp(BossColor, Color.white, 0.35f), 7);
+                var core = Quad("Core", visual, Vector2.zero, new Vector2(0.38f, 0.38f), circle, BossCoreColor, 9);
+                SetRef(boss, "core", core.GetComponent<SpriteRenderer>());
+
+                var ring = boss.gameObject.AddComponent<Weapon>();
+                SetRef(ring, "data", bossRing);
+                var burst = boss.gameObject.AddComponent<Weapon>();
+                SetRef(burst, "data", bossBurst);
+                SetRef(boss, "ringWeapon", ring);
+                SetRef(boss, "burstWeapon", burst);
+                SetRef(boss, "minionPrefab", AssetDatabase.LoadAssetAtPath<EnemyBase>(ChaserPrefabPath));
             });
             CreateWaves();
 
@@ -754,6 +790,7 @@ namespace AS.EditorTools
             director.transform.SetParent(arena.transform, false);
             SetRef(director, "spawner", spawner);
             SetList(director, "waves", waves);
+            SetRef(director, "bossPrefab", AssetDatabase.LoadAssetAtPath<Boss>(BossPrefabPath));
 
             var powerUps = new Object[PowerUpPaths.Length];
             for (int i = 0; i < powerUps.Length; i++) powerUps[i] = AssetDatabase.LoadAssetAtPath<PowerUp>(PowerUpPaths[i]);
@@ -1009,6 +1046,15 @@ namespace AS.EditorTools
             Anchor(best.rectTransform, new Vector2(1f, 1f), new Vector2(-40f, -82f), new Vector2(500f, 40f));
             var wave = UIText("Wave", hudGo.transform, "", 36, TextAlignmentOptions.Top);
             Anchor(wave.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(400f, 60f));
+            var bossBar = UIImage("BossBar", hudGo.transform, square, new Color(0f, 0f, 0f, 0.6f));
+            Anchor(bossBar.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -100f), new Vector2(700f, 24f));
+            var bossFill = UIImage("BossFill", bossBar.transform, square, BossColor);
+            Stretch(bossFill.gameObject, 4f);
+            bossFill.type = Image.Type.Filled;
+            bossFill.fillMethod = Image.FillMethod.Horizontal;
+            var bossLabel = UIText("Label", bossBar.transform, "BOSS", 26, TextAlignmentOptions.Right);
+            Anchor(bossLabel.rectTransform, new Vector2(0f, 0.5f), new Vector2(-14f, 0f), new Vector2(120f, 40f));
+            bossLabel.rectTransform.pivot = new Vector2(1f, 0.5f);
             var banner = UIText("Banner", hudGo.transform, "", 110, TextAlignmentOptions.Center);
             banner.fontStyle = FontStyles.Bold;
             Anchor(banner.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 200f), new Vector2(1400f, 200f));
@@ -1020,6 +1066,8 @@ namespace AS.EditorTools
             SetRef(hud, "bannerText", banner);
             SetRef(hud, "powerUpText", powerUpLine);
             SetRef(hud, "flash", bombFlash);
+            SetRef(hud, "bossBar", bossBar.gameObject);
+            SetRef(hud, "bossFill", bossFill);
             var pickupPopup = UIText("PickupPopup", hudGo.transform, "", 64, TextAlignmentOptions.Center);
             pickupPopup.fontStyle = FontStyles.Bold;
             Anchor(pickupPopup.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 90f), new Vector2(1000f, 90f));
@@ -1240,6 +1288,7 @@ namespace AS.EditorTools
                 (square, TankColor, 0f, "TANK", "Slow and tough. Hits twice as hard."),
                 (triangle, DasherColor, 0f, "DASHER", "Stops and shows a line, then charges along it. Step aside."),
                 (circle, SplitterColor, 0f, "SPLITTER", "Breaks into three fast Splitlings."),
+                (circle, BossColor, 0f, "BOSS", "Every fifth wave. Rings of bullets, then Chasers. Later ones aim too."),
             });
 
             var pickups = new (Sprite, Color, float, string, string)[PowerUpPaths.Length];
