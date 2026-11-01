@@ -27,6 +27,12 @@ namespace AS.UI
         [SerializeField, Min(0.1f)] float bannerDuration = 1.6f;
         [Tooltip("Seconds at the end of the banner's time spent fading out.")]
         [SerializeField, Min(0f)] float bannerFade = 0.4f;
+        [Tooltip("Shown while a boss is alive. Optional.")]
+        [SerializeField] GameObject bossBar;
+        [Tooltip("Image with Image Type = Filled.")]
+        [SerializeField] Image bossFill;
+        [SerializeField] Color bossBannerColor = new(1f, 0.3f, 0.3f);
+        [SerializeField, Min(0.1f)] float bossBannerDuration = 2.5f;
         [Tooltip("Names each pickup as it's collected, in its colour. Optional.")]
         [SerializeField] TMP_Text pickupText;
         [SerializeField, Min(0.1f)] float pickupTextDuration = 1.2f;
@@ -37,6 +43,7 @@ namespace AS.UI
         [SerializeField, Min(0.01f)] float flashFade = 0.35f;
 
         float _bannerEndTime;
+        Color _bannerColor;
         float _flashEndTime;
         float _pickupTextEndTime;
         int _score;
@@ -49,7 +56,9 @@ namespace AS.UI
         void Awake()
         {
             bannerText.enabled = false;
+            _bannerColor = bannerText.color;
             powerUpText.text = "";
+            if (bossBar != null) bossBar.SetActive(false);
             if (flash != null) flash.enabled = false;
             if (pickupText != null) pickupText.enabled = false;
         }
@@ -64,6 +73,7 @@ namespace AS.UI
             EventBus.Subscribe<PowerUpActivated>(OnPowerUpActivated);
             EventBus.Subscribe<BombDetonated>(OnBombDetonated);
             EventBus.Subscribe<PickupCollected>(OnPickupCollected);
+            EventBus.Subscribe<BossHealthChanged>(OnBossHealthChanged);
             EventBus.Subscribe<ArenaReset>(OnArenaReset);
         }
 
@@ -77,6 +87,7 @@ namespace AS.UI
             EventBus.Unsubscribe<PowerUpActivated>(OnPowerUpActivated);
             EventBus.Unsubscribe<BombDetonated>(OnBombDetonated);
             EventBus.Unsubscribe<PickupCollected>(OnPickupCollected);
+            EventBus.Unsubscribe<BossHealthChanged>(OnBossHealthChanged);
             EventBus.Unsubscribe<ArenaReset>(OnArenaReset);
         }
 
@@ -189,7 +200,15 @@ namespace AS.UI
         void OnWaveStarted(WaveStarted evt)
         {
             waveText.text = $"WAVE {evt.Number}";
-            ShowBanner($"WAVE {evt.Number}");
+            if (evt.IsBoss) ShowBanner("WARNING: BOSS", bossBannerColor, bossBannerDuration);
+            else ShowBanner($"WAVE {evt.Number}");
+        }
+
+        void OnBossHealthChanged(BossHealthChanged evt)
+        {
+            if (bossBar == null) return;
+            bossBar.SetActive(evt.Current > 0f);
+            if (bossFill != null) bossFill.fillAmount = evt.Max > 0f ? evt.Current / evt.Max : 0f;
         }
 
         void OnWaveCleared(WaveCleared evt) => ShowBanner("WAVE CLEARED");
@@ -204,13 +223,17 @@ namespace AS.UI
             waveText.text = "";
             bannerText.enabled = false;
             if (pickupText != null) pickupText.enabled = false;
+            if (bossBar != null) bossBar.SetActive(false);
         }
 
-        void ShowBanner(string message)
+        void ShowBanner(string message) => ShowBanner(message, _bannerColor, bannerDuration);
+
+        void ShowBanner(string message, Color color, float duration)
         {
             bannerText.text = message;
+            bannerText.color = color;
             bannerText.enabled = true;
-            _bannerEndTime = Time.time + bannerDuration;
+            _bannerEndTime = Time.time + duration;
         }
     }
 }

@@ -43,7 +43,7 @@ namespace AS.Tests
         public void TheExpectedAssetsExist()
         {
             Assert.AreEqual(6, Assets<WaveDefinition>("Data/Waves").Count(), "waves");
-            Assert.AreEqual(6, PrefabsWith<EnemyBase>("Prefabs/Enemies").Count(), "enemy prefabs");
+            Assert.AreEqual(7, PrefabsWith<EnemyBase>("Prefabs/Enemies").Count(), "enemy prefabs");
             Assert.AreEqual(6, Assets<PowerUp>("Data/PowerUps").Count(), "power-ups");
             Assert.AreEqual(6, PrefabsWith<PooledEffect>("Prefabs/Effects").Count(), "effect prefabs");
         }
@@ -78,6 +78,17 @@ namespace AS.Tests
             Assert.IsNotNull(splitter.ChildPrefab, "No child prefab.");
             Assert.Greater(splitter.ChildCount, 0);
             Assert.IsNotInstanceOf<Splitter>(splitter.ChildPrefab, "Children that split again would never end.");
+        }
+
+        [Test]
+        public void Boss_HasBothWeapons_AndAlwaysDrops()
+        {
+            var boss = AssetDatabase.LoadAssetAtPath<Boss>($"{Root}/Prefabs/Enemies/Boss.prefab");
+            var weapons = boss.GetComponents<Weapon>();
+            Assert.AreEqual(2, weapons.Length, "A ring weapon and a burst weapon.");
+            foreach (var weapon in weapons)
+                Assert.IsNotNull(weapon.Data, "A boss weapon has no WeaponData.");
+            Assert.AreEqual(1f, boss.Data.DropChance);
         }
 
         [Test]

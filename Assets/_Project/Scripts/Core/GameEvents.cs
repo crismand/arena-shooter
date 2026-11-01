@@ -116,7 +116,17 @@ namespace AS.Core
     {
         public readonly int Number;
         public readonly int EnemyCount;
-        public WaveStarted(int number, int enemyCount) { Number = number; EnemyCount = enemyCount; }
+        /// <summary>A boss wave: the boss instead of the usual mix.</summary>
+        public readonly bool IsBoss;
+        public WaveStarted(int number, int enemyCount, bool isBoss = false) { Number = number; EnemyCount = enemyCount; IsBoss = isBoss; }
+    }
+
+    /// <summary>The boss's health, on spawn and on every hit. Zero when it dies.</summary>
+    public readonly struct BossHealthChanged
+    {
+        public readonly float Current;
+        public readonly float Max;
+        public BossHealthChanged(float current, float max) { Current = current; Max = max; }
     }
 
     /// <summary>
