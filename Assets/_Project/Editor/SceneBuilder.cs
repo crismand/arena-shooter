@@ -43,6 +43,7 @@ namespace AS.EditorTools
         const string ArenaScenePath = Root + "/Scenes/Arena.unity";
         const string PlayerBulletPrefabPath = Root + "/Prefabs/Projectiles/PlayerBullet.prefab";
         const string EnemyBulletPrefabPath = Root + "/Prefabs/Projectiles/EnemyBullet.prefab";
+        const string HomingBulletPrefabPath = Root + "/Prefabs/Projectiles/HomingBullet.prefab";
         const string ChaserPrefabPath = Root + "/Prefabs/Enemies/Chaser.prefab";
         const string ShooterPrefabPath = Root + "/Prefabs/Enemies/Shooter.prefab";
         const string TankPrefabPath = Root + "/Prefabs/Enemies/Tank.prefab";
@@ -60,6 +61,9 @@ namespace AS.EditorTools
             Root + "/Data/PowerUps/PowerUp_Spread.asset",
             Root + "/Data/PowerUps/PowerUp_Rapid.asset",
             Root + "/Data/PowerUps/PowerUp_Shield.asset",
+            Root + "/Data/PowerUps/PowerUp_Health.asset",
+            Root + "/Data/PowerUps/PowerUp_Bomb.asset",
+            Root + "/Data/PowerUps/PowerUp_Homing.asset",
         };
 
         // Authored waves; endless scaling continues from the last one. Each group is (enemy prefab, count).
@@ -90,6 +94,7 @@ namespace AS.EditorTools
         static readonly Color SplitterColor = new(0.42f, 0.86f, 0.46f);
         static readonly Color SplitlingColor = new(0.66f, 1f, 0.6f);
         static readonly Color EnemyBulletColor = new(1f, 0.45f, 0.85f);
+        static readonly Color HomingBulletColor = new(0.78f, 0.58f, 1f);
         static readonly Color ShieldColor = new(0.45f, 0.8f, 1f, 0.35f);
 
         [MenuItem("AS/Setup/Build Arena Scene")]
@@ -104,6 +109,7 @@ namespace AS.EditorTools
             var circle = CreateSprite("Circle", 128, CircleAlpha, FilterMode.Bilinear);
             var square = CreateSprite("Square", 4, (_, _, _) => 1f, FilterMode.Point);
             var triangle = CreateSprite("Triangle", 128, TriangleAlpha, FilterMode.Bilinear);
+            var heart = CreateSprite("Heart", 128, HeartAlpha, FilterMode.Bilinear);
 
             var input = CreateAsset(ScriptableObject.CreateInstance<InputReader>(), Root + "/Data/Input/InputReader.asset");
             SetRef(input, "actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath));
@@ -111,6 +117,8 @@ namespace AS.EditorTools
             // Weapons
             var bullet = CreateBulletPrefab("PlayerBullet", PlayerBulletPrefabPath, circle, BulletColor, new Vector2(0.4f, 0.22f), layers.PlayerShot);
             var enemyBullet = CreateBulletPrefab("EnemyBullet", EnemyBulletPrefabPath, circle, EnemyBulletColor, new Vector2(0.32f, 0.32f), layers.EnemyShot, Tags.EnemyProjectile);
+            var homingBullet = CreateBulletPrefab("HomingBullet", HomingBulletPrefabPath, circle, HomingBulletColor, new Vector2(0.42f, 0.26f), layers.PlayerShot,
+                extra: go => SetInt(go.AddComponent<Homing>(), "targets", 1 << layers.Enemy));
 
             var blaster = CreateAsset(ScriptableObject.CreateInstance<WeaponData>(), Root + "/Data/Weapons/Weapon_Blaster.asset");
             SetRef(blaster, "projectilePrefab", bullet);
@@ -130,6 +138,14 @@ namespace AS.EditorTools
                 SetFloat(w, "projectileLifetime", 1.2f);
             });
             SetRef(rapid, "projectilePrefab", bullet);
+            // Slower than the blaster so the curve reads, and a little longer-lived to make up for it.
+            var homing = CreateOrLoad<WeaponData>(Root + "/Data/Weapons/Weapon_Homing.asset", w =>
+            {
+                SetFloat(w, "fireRate", 7f);
+                SetFloat(w, "projectileSpeed", 13f);
+                SetFloat(w, "projectileLifetime", 1.8f);
+            });
+            SetRef(homing, "projectilePrefab", homingBullet);
             var enemyBlaster = CreateOrLoad<WeaponData>(Root + "/Data/Weapons/Weapon_EnemyBlaster.asset", w =>
             {
                 SetFloat(w, "fireRate", 0.8f);
@@ -189,6 +205,12 @@ namespace AS.EditorTools
             var rapidUp = CreateOrLoad<WeaponPowerUp>(PowerUpPaths[1], p => SetPowerUp(p, "RAPID", new Color(0.6f, 1f, 0.35f), 8f));
             SetRef(rapidUp, "weapon", rapid);
             CreateOrLoad<ShieldPowerUp>(PowerUpPaths[2], p => SetPowerUp(p, "SHIELD", new Color(0.4f, 0.75f, 1f), 6f));
+            // Health and Bomb are instant (no duration) and rarer than the boosts.
+            var healthUp = CreateOrLoad<HealthPowerUp>(PowerUpPaths[3], p => SetPowerUp(p, "HEALTH", new Color(1f, 0.22f, 0.3f), 1f, dropWeight: 0.5f));
+            SetRef(healthUp, "icon", heart);
+            CreateOrLoad<BombPowerUp>(PowerUpPaths[4], p => SetPowerUp(p, "BOMB", new Color(1f, 0.95f, 0.35f), 1f, dropWeight: 0.3f));
+            var homingUp = CreateOrLoad<WeaponPowerUp>(PowerUpPaths[5], p => SetPowerUp(p, "HOMING", HomingBulletColor, 8f));
+            SetRef(homingUp, "weapon", homing);
             CreatePickupPrefab(square, circle, layers.Pickup);
 
             // Feedback
@@ -382,11 +404,12 @@ namespace AS.EditorTools
             SetFloat(data, "dropChance", dropChance);
         }
 
-        static void SetPowerUp(PowerUp powerUp, string label, Color color, float duration)
+        static void SetPowerUp(PowerUp powerUp, string label, Color color, float duration, float dropWeight = 1f)
         {
             SetString(powerUp, "label", label);
             SetColor(powerUp, "color", color);
             SetFloat(powerUp, "duration", duration);
+            SetFloat(powerUp, "dropWeight", dropWeight);
         }
 
         static float CircleAlpha(int x, int y, int size)
@@ -402,6 +425,23 @@ namespace AS.EditorTools
             float u = (x + 0.5f) / size;
             float v = (y + 0.5f) / size;
             return Mathf.Clamp01((0.5f * (1f - u) - Mathf.Abs(v - 0.5f)) * size);
+        }
+
+        /// <summary>The classic heart curve, (x² + y² - 1)³ = x²y³, sampled 4 x 4 per pixel for smooth edges.</summary>
+        static float HeartAlpha(int x, int y, int size)
+        {
+            const int samples = 4;
+            int inside = 0;
+            for (int i = 0; i < samples; i++)
+                for (int j = 0; j < samples; j++)
+                {
+                    // The curve spans about -1.14..1.14 across and -1..1.25 up; centre and fit it.
+                    float hx = ((x + (i + 0.5f) / samples) / size - 0.5f) * 2.6f;
+                    float hy = ((y + (j + 0.5f) / samples) / size - 0.5f) * 2.6f + 0.12f;
+                    float a = hx * hx + hy * hy - 1f;
+                    if (a * a * a - hx * hx * hy * hy * hy <= 0f) inside++;
+                }
+            return inside / (float)(samples * samples);
         }
 
         /// <summary>White sprite, one world unit across, so scale = size in units.</summary>
@@ -434,7 +474,8 @@ namespace AS.EditorTools
             return AssetDatabase.LoadAssetAtPath<Sprite>(path);
         }
 
-        static Projectile CreateBulletPrefab(string name, string path, Sprite circle, Color color, Vector2 size, int layer, string tag = "Untagged")
+        static Projectile CreateBulletPrefab(string name, string path, Sprite circle, Color color, Vector2 size, int layer,
+                                             string tag = "Untagged", Action<GameObject> extra = null)
         {
             var go = new GameObject(name) { layer = layer, tag = tag };
             go.transform.localScale = new Vector3(size.x, size.y, 1f);
@@ -450,6 +491,7 @@ namespace AS.EditorTools
             body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
             go.AddComponent<CircleCollider2D>().isTrigger = true;
             go.AddComponent<Projectile>();
+            extra?.Invoke(go);
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(go, path);
             Object.DestroyImmediate(go);
@@ -535,6 +577,7 @@ namespace AS.EditorTools
             CreateEffectPrefab("PlayerHit", material, 14, new Vector2(3f, 8f), new Vector2(0.2f, 0.4f), new Vector2(0.1f, 0.22f), new Color(1f, 0.3f, 0.3f));
             CreateEffectPrefab("PlayerDeath", material, 60, new Vector2(2f, 13f), new Vector2(0.5f, 1.1f), new Vector2(0.12f, 0.4f), PlayerColor);
             CreateEffectPrefab("PickupCollected", material, 16, new Vector2(1.5f, 4.5f), new Vector2(0.3f, 0.5f), new Vector2(0.1f, 0.2f), Color.white, shapeRadius: 0.5f);
+            CreateEffectPrefab("Bomb", material, 90, new Vector2(8f, 24f), new Vector2(0.4f, 0.9f), new Vector2(0.15f, 0.45f), new Color(1f, 0.92f, 0.5f), shapeRadius: 0.5f);
         }
 
         /// <summary>A single burst of particles flying outward in the XY plane, slowing, shrinking and fading.</summary>
@@ -606,6 +649,7 @@ namespace AS.EditorTools
             PlaceholderAudio.Ensure(SfxPath("PlayerHurt"), false, () => PlaceholderAudio.Sweep(0.25f, 330f, 110f, saw, 3f, noise: 0.25f, gain: 0.45f));
             PlaceholderAudio.Ensure(SfxPath("PlayerDeath"), false, () => PlaceholderAudio.Sweep(1f, 440f, 30f, saw, 3f, noise: 0.5f, gain: 0.5f));
             PlaceholderAudio.Ensure(SfxPath("Pickup"), false, () => PlaceholderAudio.Notes(0.07f, square, 3f, 0.3f, 84, 88, 91, 96));
+            PlaceholderAudio.Ensure(SfxPath("Bomb"), false, () => PlaceholderAudio.Sweep(0.9f, 180f, 25f, square, 4f, noise: 0.8f, gain: 0.6f));
             PlaceholderAudio.Ensure(SfxPath("WaveStarted"), false, () => PlaceholderAudio.Notes(0.12f, triangle, 2f, 0.4f, 69, 76));
             PlaceholderAudio.Ensure(SfxPath("WaveCleared"), false, () => PlaceholderAudio.Notes(0.1f, sine, 2f, 0.45f, 72, 76, 79, 84));
             PlaceholderAudio.Ensure(MusicPath, true, PlaceholderAudio.MusicLoop);
@@ -735,7 +779,7 @@ namespace AS.EditorTools
             foreach (var (field, prefab) in new[]
                      {
                          ("enemyDeath", "EnemyDeath"), ("impact", "Impact"), ("playerHit", "PlayerHit"),
-                         ("playerDeath", "PlayerDeath"), ("pickupCollected", "PickupCollected"),
+                         ("playerDeath", "PlayerDeath"), ("pickupCollected", "PickupCollected"), ("bomb", "Bomb"),
                      })
                 SetRef(effects, field, AssetDatabase.LoadAssetAtPath<PooledEffect>(EffectPath(prefab)));
 
@@ -751,6 +795,7 @@ namespace AS.EditorTools
             SetCue(sfx, "playerHurt", "PlayerHurt", 1f, 0.04f, 0.1f);
             SetCue(sfx, "playerDeath", "PlayerDeath", 1f, 0f, 0.5f);
             SetCue(sfx, "pickup", "Pickup", 0.8f, 0f, 0.05f);
+            SetCue(sfx, "bomb", "Bomb", 1f, 0f, 0.2f);
             SetCue(sfx, "waveStarted", "WaveStarted", 0.7f, 0f, 0.2f);
             SetCue(sfx, "waveCleared", "WaveCleared", 0.7f, 0f, 0.2f);
 
@@ -881,6 +926,8 @@ namespace AS.EditorTools
             SetRef(receiver, "weapon", weapon);
             SetRef(receiver, "health", health);
             SetRef(receiver, "shieldVisual", shield);
+            SetInt(receiver, "bombTargets", 1 << LayerMask.NameToLayer(Layers.Enemy));
+            SetInt(receiver, "bombClears", 1 << LayerMask.NameToLayer(Layers.EnemyShot));
 
             if (input != null) SetRef(player.AddComponent<HumanPlayerInput>(), "input", input);
             if (agentInput) player.AddComponent<AgentInput>();
@@ -942,6 +989,10 @@ namespace AS.EditorTools
             Stretch(hudGo);
             var hud = hudGo.AddComponent<HUD>();
 
+            // First, so the rest of the HUD draws over it.
+            var bombFlash = UIImage("BombFlash", hudGo.transform, square, new Color(1f, 0.97f, 0.85f, 0f));
+            Stretch(bombFlash.gameObject);
+
             var barBg = UIImage("HealthBarBg", hudGo.transform, square, new Color(0f, 0f, 0f, 0.6f));
             Anchor(barBg.rectTransform, new Vector2(0f, 1f), new Vector2(40f, -40f), new Vector2(360f, 28f));
             var fill = UIImage("HealthFill", barBg.transform, square, PlayerColor);
@@ -968,6 +1019,11 @@ namespace AS.EditorTools
             SetRef(hud, "waveText", wave);
             SetRef(hud, "bannerText", banner);
             SetRef(hud, "powerUpText", powerUpLine);
+            SetRef(hud, "flash", bombFlash);
+            var pickupPopup = UIText("PickupPopup", hudGo.transform, "", 64, TextAlignmentOptions.Center);
+            pickupPopup.fontStyle = FontStyles.Bold;
+            Anchor(pickupPopup.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 90f), new Vector2(1000f, 90f));
+            SetRef(hud, "pickupText", pickupPopup);
 
             // Settings, built first so the menus below can open it; moved last at the end so it draws on top.
             var settings = BuildSettingsMenu(canvas, square);
@@ -982,10 +1038,14 @@ namespace AS.EditorTools
             Anchor(titleBest.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 110f), new Vector2(800f, 60f));
             var play = UIButton("Play", titleScreen.transform, square, new Vector2(0f, -10f));
             var watch = UIButton("Watch AI", titleScreen.transform, square, new Vector2(0f, -100f));
-            var titleSettings = UIButton("Settings", titleScreen.transform, square, new Vector2(0f, -190f));
-            var titleQuit = UIButton("Quit", titleScreen.transform, square, new Vector2(0f, -280f));
-            UnityEventTools.AddPersistentListener(play.onClick, gameManager.Play);
+            var titleGuide = UIButton("Guide", titleScreen.transform, square, new Vector2(0f, -190f));
+            var titleSettings = UIButton("Settings", titleScreen.transform, square, new Vector2(0f, -280f));
+            var titleQuit = UIButton("Quit", titleScreen.transform, square, new Vector2(0f, -370f));
+            // After the title, so it draws over it.
+            var guide = BuildGuide(canvas, square, gameManager);
+            UnityEventTools.AddPersistentListener(play.onClick, guide.PlayFromTitle);
             UnityEventTools.AddPersistentListener(watch.onClick, gameManager.WatchAI);
+            UnityEventTools.AddPersistentListener(titleGuide.onClick, guide.Show);
             UnityEventTools.AddObjectPersistentListener<UIPanel>(titleSettings.onClick, settings.Open, titleScreen);
             UnityEventTools.AddPersistentListener(titleQuit.onClick, gameManager.Quit);
             SetRef(titleScreen, "bestText", titleBest);
@@ -1159,6 +1219,102 @@ namespace AS.EditorTools
             rt.anchorMax = Vector2.one;
             rt.offsetMin = new Vector2(inset, inset);
             rt.offsetMax = new Vector2(-inset, -inset);
+        }
+
+        /// <summary>
+        /// The field guide: a page of enemies and a page of pickups, each a list of icon, name and one
+        /// line. Pickup names, colours and durations come from the power-up assets, so they stay true.
+        /// </summary>
+        static GuideScreen BuildGuide(Transform canvas, Sprite square, GameManager gameManager)
+        {
+            Sprite Sprite(string name) => AssetDatabase.LoadAssetAtPath<Sprite>($"{Root}/Art/Sprites/{name}.png");
+            var circle = Sprite("Circle");
+            var triangle = Sprite("Triangle");
+
+            var guide = Panel<GuideScreen>("GuideScreen", canvas, square, new Color(0.03f, 0.04f, 0.07f, 0.94f));
+
+            var enemies = GuidePage("Enemies", guide.transform, new[]
+            {
+                (triangle, ChaserColor, 0f, "CHASER", "Runs straight at you."),
+                (circle, ShooterColor, 0f, "SHOOTER", "Keeps its distance and shoots."),
+                (square, TankColor, 0f, "TANK", "Slow and tough. Hits twice as hard."),
+                (triangle, DasherColor, 0f, "DASHER", "Stops and shows a line, then charges along it. Step aside."),
+                (circle, SplitterColor, 0f, "SPLITTER", "Breaks into three fast Splitlings."),
+            });
+
+            var pickups = new (Sprite, Color, float, string, string)[PowerUpPaths.Length];
+            for (int i = 0; i < PowerUpPaths.Length; i++)
+            {
+                var powerUp = AssetDatabase.LoadAssetAtPath<PowerUp>(PowerUpPaths[i]);
+                // Pickups without an icon are a square turned into a diamond, as in the arena.
+                pickups[i] = powerUp.Icon != null
+                    ? (powerUp.Icon, powerUp.Color, 0f, powerUp.Label, PickupDescription(powerUp))
+                    : (square, powerUp.Color, 45f, powerUp.Label, PickupDescription(powerUp));
+            }
+            var pickupPage = GuidePage("Pickups", guide.transform, pickups);
+
+            var pageLabel = UIText("PageLabel", guide.transform, "", 30, TextAlignmentOptions.Bottom);
+            pageLabel.color = new Color(PanelTextColor.r, PanelTextColor.g, PanelTextColor.b, 0.6f);
+            Anchor(pageLabel.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 90f), new Vector2(400f, 50f));
+            var hint = UIText("Hint", guide.transform, "PRESS ANY BUTTON TO CONTINUE", 30, TextAlignmentOptions.Bottom);
+            hint.color = pageLabel.color;
+            Anchor(hint.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(1000f, 50f));
+
+            SetRef(guide, "game", gameManager);
+            SetRef(guide, "input", AssetDatabase.LoadAssetAtPath<InputReader>(Root + "/Data/Input/InputReader.asset"));
+            SetList(guide, "pages", new Object[] { enemies, pickupPage });
+            SetRef(guide, "pageLabel", pageLabel);
+            return guide;
+        }
+
+        static string PickupDescription(PowerUp powerUp)
+        {
+            string seconds = $"for {powerUp.Duration:0.#} s";
+            return powerUp switch
+            {
+                HealthPowerUp health => $"Restores {health.Amount:0.#} health.",
+                BombPowerUp => "Hits every enemy and clears enemy bullets.",
+                ShieldPowerUp => $"No damage {seconds}.",
+                WeaponPowerUp { Label: "SPREAD" } => $"Five bullets per shot {seconds}.",
+                WeaponPowerUp { Label: "RAPID" } => $"Much faster fire {seconds}.",
+                WeaponPowerUp { Label: "HOMING" } => $"Shots curve toward enemies {seconds}.",
+                _ => $"Lasts {seconds}.",
+            };
+        }
+
+        /// <summary>A heading and one row per entry: (icon, colour, icon rotation, name, description).</summary>
+        static GameObject GuidePage(string title, Transform parent, (Sprite icon, Color color, float rotation, string name, string text)[] entries)
+        {
+            var page = UIElement(title, parent);
+            Stretch(page);
+
+            var heading = UIText("Title", page.transform, title.ToUpperInvariant(), 84, TextAlignmentOptions.Center);
+            heading.fontStyle = FontStyles.Bold;
+            Anchor(heading.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 390f), new Vector2(1000f, 120f));
+
+            const float rowHeight = 105f;
+            float top = 260f;
+            for (int i = 0; i < entries.Length; i++)
+            {
+                var (icon, color, rotation, name, text) = entries[i];
+                float y = top - i * rowHeight;
+                var row = UIElement(name, page.transform);
+                Anchor(row.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0f, y), new Vector2(1400f, rowHeight));
+
+                var image = UIImage("Icon", row.transform, icon, color);
+                image.preserveAspect = true;
+                Anchor(image.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(-560f, 0f), new Vector2(64f, 64f));
+                // Anchor sets the pivot to the anchor point, which is the centre here, so this turns in place.
+                image.rectTransform.localRotation = Quaternion.Euler(0f, 0f, rotation);
+
+                var label = UIText("Name", row.transform, name, 46, TextAlignmentOptions.Left);
+                label.fontStyle = FontStyles.Bold;
+                label.color = color;
+                Anchor(label.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(-300f, 0f), new Vector2(380f, rowHeight));
+                var line = UIText("Text", row.transform, text, 34, TextAlignmentOptions.Left);
+                Anchor(line.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(330f, 0f), new Vector2(860f, rowHeight));
+            }
+            return page;
         }
 
         static void Anchor(RectTransform rt, Vector2 anchor, Vector2 position, Vector2 size)

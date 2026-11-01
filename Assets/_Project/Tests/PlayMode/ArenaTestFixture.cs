@@ -18,7 +18,8 @@ namespace AS.Tests
     /// handles to the main scene objects, and helpers. The wave director is switched off unless a
     /// test asks for waves, so enemies only appear where the test puts them, and the run starts
     /// past the title screen unless a test asks to stay on it. High scores and settings go to
-    /// throwaway PlayerPrefs keys, so tests never touch the real ones.
+    /// throwaway PlayerPrefs keys, so tests never touch the real ones. The field guide counts as seen,
+    /// so Play starts a run at once; the guide's own tests turn that off.
     /// </summary>
     public abstract class ArenaTestFixture : InputTestFixture
     {
@@ -49,6 +50,7 @@ namespace AS.Tests
             HighScoreStore.Clear();
             GameSettings.KeyPrefix = TestSettingsPrefix;
             GameSettings.Clear();
+            GameSettings.GuideSeen = true;
         }
 
         public override void TearDown()

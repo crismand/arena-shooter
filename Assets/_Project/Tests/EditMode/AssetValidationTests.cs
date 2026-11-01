@@ -44,8 +44,8 @@ namespace AS.Tests
         {
             Assert.AreEqual(6, Assets<WaveDefinition>("Data/Waves").Count(), "waves");
             Assert.AreEqual(6, PrefabsWith<EnemyBase>("Prefabs/Enemies").Count(), "enemy prefabs");
-            Assert.AreEqual(3, Assets<PowerUp>("Data/PowerUps").Count(), "power-ups");
-            Assert.AreEqual(5, PrefabsWith<PooledEffect>("Prefabs/Effects").Count(), "effect prefabs");
+            Assert.AreEqual(6, Assets<PowerUp>("Data/PowerUps").Count(), "power-ups");
+            Assert.AreEqual(6, PrefabsWith<PooledEffect>("Prefabs/Effects").Count(), "effect prefabs");
         }
 
         [TestCaseSource(nameof(Waves))]
@@ -99,12 +99,33 @@ namespace AS.Tests
         }
 
         [TestCaseSource(nameof(PowerUps))]
-        public void PowerUp_HasALabel_AndADuration(PowerUp powerUp)
+        public void PowerUp_HasALabel_ADropWeight_AndWhatItNeeds(PowerUp powerUp)
         {
             Assert.IsFalse(string.IsNullOrWhiteSpace(powerUp.Label));
-            Assert.Greater(powerUp.Duration, 0f);
-            if (powerUp is WeaponPowerUp weaponPowerUp)
-                Assert.IsNotNull(weaponPowerUp.Weapon, "Weapon power-up has no WeaponData.");
+            Assert.Greater(powerUp.DropWeight, 0f, "A zero drop weight never drops.");
+            if (!powerUp.IsInstant) Assert.Greater(powerUp.Duration, 0f);
+            switch (powerUp)
+            {
+                case WeaponPowerUp weaponPowerUp:
+                    Assert.IsNotNull(weaponPowerUp.Weapon, "Weapon power-up has no WeaponData.");
+                    break;
+                case HealthPowerUp healthPowerUp:
+                    Assert.Greater(healthPowerUp.Amount, 0f);
+                    Assert.IsNotNull(healthPowerUp.Icon, "Health should look like a heart, not a diamond.");
+                    break;
+                case BombPowerUp bomb:
+                    Assert.Greater(bomb.Damage, 0f);
+                    // From any corner, the far corner of the 32 x 20 arena is about 38 units away.
+                    Assert.GreaterOrEqual(bomb.Radius, 38f, "The bomb should reach the whole arena.");
+                    break;
+            }
+        }
+
+        [Test]
+        public void HomingWeapon_FiresBulletsThatHomeOnEnemies()
+        {
+            var homing = AssetDatabase.LoadAssetAtPath<WeaponData>($"{Root}/Data/Weapons/Weapon_Homing.asset");
+            Assert.IsNotNull(homing.ProjectilePrefab.GetComponent<Homing>());
         }
 
         [TestCaseSource(nameof(Effects))]

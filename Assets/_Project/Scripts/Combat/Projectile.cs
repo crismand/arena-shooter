@@ -49,7 +49,8 @@ namespace AS.Combat
             Despawn();
         }
 
-        void Despawn()
+        /// <summary>Removes the projectile without hitting anything (a bomb clearing the air).</summary>
+        public void Despawn()
         {
             if (!_live) return;
             _live = false;

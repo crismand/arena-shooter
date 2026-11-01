@@ -14,5 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: AS.Pickups::AS.Pickups.WeaponPowerUp
   label: SPREAD
   color: {r: 1, g: 0.6, b: 0.2, a: 1}
+  icon: {fileID: 0}
   duration: 8
+  dropWeight: 1
   weapon: {fileID: 11400000, guid: 6818f13fd9c6ff04880dcb8da408de40, type: 2}

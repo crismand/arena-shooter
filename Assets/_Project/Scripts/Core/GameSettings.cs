@@ -3,7 +3,8 @@ using UnityEngine;
 namespace AS.Core
 {
     /// <summary>
-    /// Player settings kept in PlayerPrefs: music and effects volume (0 to 1) and fullscreen.
+    /// Player settings kept in PlayerPrefs: music and effects volume (0 to 1), fullscreen, and whether
+    /// the field guide has been seen.
     /// Setting a value stores it; <see cref="Save"/> writes the stored values to disk.
     /// </summary>
     public static class GameSettings
@@ -34,6 +35,13 @@ namespace AS.Core
             set => PlayerPrefs.SetInt(KeyPrefix + "Fullscreen", value ? 1 : 0);
         }
 
+        /// <summary>Set once the guide has been shown, so Play skips it from then on.</summary>
+        public static bool GuideSeen
+        {
+            get => PlayerPrefs.GetInt(KeyPrefix + "GuideSeen", 0) == 1;
+            set => PlayerPrefs.SetInt(KeyPrefix + "GuideSeen", value ? 1 : 0);
+        }
+
         public static void Save() => PlayerPrefs.Save();
 
         public static void Clear()
@@ -41,6 +49,7 @@ namespace AS.Core
             PlayerPrefs.DeleteKey(KeyPrefix + "MusicVolume");
             PlayerPrefs.DeleteKey(KeyPrefix + "SfxVolume");
             PlayerPrefs.DeleteKey(KeyPrefix + "Fullscreen");
+            PlayerPrefs.DeleteKey(KeyPrefix + "GuideSeen");
         }
 
         /// <summary>A 0 to 1 slider value as a mixer level: full is 0 dB, half is about -6 dB, 0 is silent.</summary>
