@@ -2,6 +2,7 @@
 using System.Collections;
 using AS.Combat;
 using AS.Core;
+using AS.Enemies;
 using AS.Pickups;
 using NUnit.Framework;
 using UnityEngine;
@@ -9,11 +10,15 @@ using UnityEngine.TestTools;
 
 namespace AS.Tests
 {
-    /// <summary>Pickups, drops and the three power-up effects.</summary>
+    /// <summary>Pickups, drops and the power-up effects.</summary>
     public class PowerUpTests : ArenaTestFixture
     {
         const string SpreadPath = "Assets/_Project/Data/PowerUps/PowerUp_Spread.asset";
         const string ShieldPath = "Assets/_Project/Data/PowerUps/PowerUp_Shield.asset";
+        const string HealthPath = "Assets/_Project/Data/PowerUps/PowerUp_Health.asset";
+        const string BombPath = "Assets/_Project/Data/PowerUps/PowerUp_Bomb.asset";
+        const string HomingPath = "Assets/_Project/Data/PowerUps/PowerUp_Homing.asset";
+        const string EnemyBulletPath = "Assets/_Project/Prefabs/Projectiles/EnemyBullet.prefab";
 
         PickupDropper _dropper;
 
@@ -86,6 +91,70 @@ namespace AS.Tests
             yield return new WaitForSeconds(1f);
 
             Assert.AreEqual(health.Max, health.Current, "Shielded player took damage.");
+        }
+
+        [UnityTest]
+        public IEnumerator HealthPickup_RestoresOnePoint_AndUpdatesTheHealthBar()
+        {
+            yield return LoadArenaWithDropper();
+            var health = player.GetComponent<Health>();
+            health.TakeDamage(new DamageInfo(1f, Vector2.zero, null));
+            Assert.Less(health.Current, health.Max);
+
+            _dropper.Spawn(LoadAsset<PowerUp>(HealthPath), player.transform.position);
+            yield return PhysicsSteps();
+
+            Assert.AreEqual(health.Max, health.Current);
+            Assert.AreEqual(1f, FindImage("UI/HUD/HealthBarBg/HealthFill").fillAmount, 0.001f);
+            Assert.AreEqual("", FindText("UI/HUD/PowerUps").text, "Instant power-ups have no timer to show.");
+            var popup = FindText("UI/HUD/PickupPopup");
+            Assert.IsTrue(popup.enabled, "The pickup's name should pop up.");
+            Assert.AreEqual("HEALTH", popup.text);
+        }
+
+        [UnityTest]
+        public IEnumerator BombPickup_KillsWeakEnemies_HurtsTanks_AndClearsEnemyBullets()
+        {
+            yield return LoadArenaWithDropper();
+            var chaserA = spawner.Spawn(chaserPrefab, new Vector2(-12f, 8f));
+            var chaserB = spawner.Spawn(chaserPrefab, new Vector2(12f, -8f));
+            var tank = spawner.Spawn(LoadAsset<EnemyBase>(TankPrefabPath), new Vector2(12f, 8f));
+
+            // A bullet heading away from the player, so only the bomb can remove it early.
+            var bullet = Object.Instantiate(LoadAsset<Projectile>(EnemyBulletPath), new Vector2(-6f, -6f), Quaternion.identity, arena.transform);
+            bullet.Launch(new Vector2(-1f, -1f).normalized, 1f, 10f, new DamageInfo(1f, Vector2.zero, null), null);
+            yield return PhysicsSteps();
+
+            _dropper.Spawn(LoadAsset<PowerUp>(BombPath), player.transform.position);
+            yield return PhysicsSteps();
+
+            Assert.IsFalse(chaserA.gameObject.activeSelf, "Chasers should die.");
+            Assert.IsFalse(chaserB.gameObject.activeSelf, "Even in the far corner.");
+            Assert.IsTrue(tank.gameObject.activeSelf, "A Tank survives a bomb...");
+            Assert.Less(tank.Health.Current, tank.Health.Max, "...but takes the damage.");
+            Assert.IsTrue(bullet == null, "Enemy bullets should be cleared.");
+            Assert.IsTrue(FindImage("UI/HUD/BombFlash").enabled, "The screen should flash.");
+        }
+
+        [UnityTest]
+        public IEnumerator HomingShots_CurveIntoAnEnemyOffToTheSide()
+        {
+            yield return LoadArenaWithDropper();
+            var tank = spawner.Spawn(LoadAsset<EnemyBase>(TankPrefabPath), player.transform.position + new Vector3(6f, 4f));
+            _dropper.Spawn(LoadAsset<PowerUp>(HomingPath), player.transform.position);
+            yield return PhysicsSteps();
+            StringAssert.StartsWith("HOMING", FindText("UI/HUD/PowerUps").text);
+
+            // Aimed straight right: a plain bullet passes well below the Tank.
+            AimAt(player.transform.position + Vector3.right * 5f);
+            yield return null;
+            Press(mouse.leftButton);
+            yield return null;
+            Release(mouse.leftButton);
+
+            float giveUpAt = Time.time + 1.5f;
+            while (tank.Health.Current == tank.Health.Max && Time.time < giveUpAt) yield return null;
+            Assert.Less(tank.Health.Current, tank.Health.Max, "The homing shot never reached the Tank.");
         }
     }
 }

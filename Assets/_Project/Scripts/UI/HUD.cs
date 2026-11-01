@@ -9,7 +9,9 @@ namespace AS.UI
 {
     /// <summary>
     /// In-game overlay: health bar, active power-ups, score, best score, wave number and a centre
-    /// banner on wave start/clear. The best score climbs live once this run passes it.
+    /// banner on wave start/clear, the name of each pickup as it's collected, and a full-screen flash
+    /// when a bomb goes off. The best score climbs
+    /// live once this run passes it.
     /// Listens to events only and never references gameplay objects.
     /// </summary>
     public class HUD : MonoBehaviour
@@ -25,8 +27,18 @@ namespace AS.UI
         [SerializeField, Min(0.1f)] float bannerDuration = 1.6f;
         [Tooltip("Seconds at the end of the banner's time spent fading out.")]
         [SerializeField, Min(0f)] float bannerFade = 0.4f;
+        [Tooltip("Names each pickup as it's collected, in its colour. Optional.")]
+        [SerializeField] TMP_Text pickupText;
+        [SerializeField, Min(0.1f)] float pickupTextDuration = 1.2f;
+        [SerializeField, Min(0f)] float pickupTextFade = 0.4f;
+        [Tooltip("Full-screen image flashed when a bomb goes off. Optional.")]
+        [SerializeField] Image flash;
+        [SerializeField, Range(0f, 1f)] float flashAlpha = 0.55f;
+        [SerializeField, Min(0.01f)] float flashFade = 0.35f;
 
         float _bannerEndTime;
+        float _flashEndTime;
+        float _pickupTextEndTime;
         int _score;
         int _best;
         // Label → time it runs out. Re-collecting the same power-up just moves its end time.
@@ -38,6 +50,8 @@ namespace AS.UI
         {
             bannerText.enabled = false;
             powerUpText.text = "";
+            if (flash != null) flash.enabled = false;
+            if (pickupText != null) pickupText.enabled = false;
         }
 
         void OnEnable()
@@ -48,6 +62,8 @@ namespace AS.UI
             EventBus.Subscribe<WaveStarted>(OnWaveStarted);
             EventBus.Subscribe<WaveCleared>(OnWaveCleared);
             EventBus.Subscribe<PowerUpActivated>(OnPowerUpActivated);
+            EventBus.Subscribe<BombDetonated>(OnBombDetonated);
+            EventBus.Subscribe<PickupCollected>(OnPickupCollected);
             EventBus.Subscribe<ArenaReset>(OnArenaReset);
         }
 
@@ -59,6 +75,8 @@ namespace AS.UI
             EventBus.Unsubscribe<WaveStarted>(OnWaveStarted);
             EventBus.Unsubscribe<WaveCleared>(OnWaveCleared);
             EventBus.Unsubscribe<PowerUpActivated>(OnPowerUpActivated);
+            EventBus.Unsubscribe<BombDetonated>(OnBombDetonated);
+            EventBus.Unsubscribe<PickupCollected>(OnPickupCollected);
             EventBus.Unsubscribe<ArenaReset>(OnArenaReset);
         }
 
@@ -66,6 +84,53 @@ namespace AS.UI
         {
             UpdatePowerUps();
             UpdateBanner();
+            UpdateFlash();
+            UpdatePickupText();
+        }
+
+        void UpdatePickupText()
+        {
+            if (pickupText == null || !pickupText.enabled) return;
+            float remaining = _pickupTextEndTime - Time.time;
+            if (remaining <= 0f)
+            {
+                pickupText.enabled = false;
+                return;
+            }
+            var color = pickupText.color;
+            color.a = pickupTextFade > 0f ? Mathf.Clamp01(remaining / pickupTextFade) : 1f;
+            pickupText.color = color;
+        }
+
+        void OnPickupCollected(PickupCollected evt)
+        {
+            if (pickupText == null || string.IsNullOrEmpty(evt.Label)) return;
+            pickupText.text = evt.Label;
+            pickupText.color = new Color(evt.Color.r, evt.Color.g, evt.Color.b, 1f);
+            pickupText.enabled = true;
+            _pickupTextEndTime = Time.time + pickupTextDuration;
+        }
+
+        // Unscaled, so hit-stop from the bomb's kills doesn't hold the flash on screen.
+        void UpdateFlash()
+        {
+            if (flash == null || !flash.enabled) return;
+            float remaining = _flashEndTime - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                flash.enabled = false;
+                return;
+            }
+            var color = flash.color;
+            color.a = flashAlpha * remaining / flashFade;
+            flash.color = color;
+        }
+
+        void OnBombDetonated(BombDetonated _)
+        {
+            if (flash == null) return;
+            _flashEndTime = Time.unscaledTime + flashFade;
+            flash.enabled = true;
         }
 
         void UpdatePowerUps()
@@ -138,6 +203,7 @@ namespace AS.UI
             powerUpText.text = "";
             waveText.text = "";
             bannerText.enabled = false;
+            if (pickupText != null) pickupText.enabled = false;
         }
 
         void ShowBanner(string message)

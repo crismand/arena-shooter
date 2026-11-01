@@ -22,6 +22,8 @@ namespace AS.Combat
 
         public event Action<DamageInfo> Damaged;
         public event Action Died;
+        /// <summary>Health went up (not on a reset).</summary>
+        public event Action Healed;
 
         void Awake() => Current = maxHealth;
 
@@ -36,6 +38,15 @@ namespace AS.Combat
         /// <summary>Ignore all damage for <paramref name="seconds"/>. Never shortens a longer window already running.</summary>
         public void GrantInvulnerability(float seconds) =>
             _invulnerableUntil = Mathf.Max(_invulnerableUntil, Time.time + seconds);
+
+        /// <summary>Adds up to <paramref name="amount"/>, never past the maximum. False if already full or dead.</summary>
+        public bool Heal(float amount)
+        {
+            if (!IsAlive || amount <= 0f || Current >= maxHealth) return false;
+            Current = Mathf.Min(maxHealth, Current + amount);
+            Healed?.Invoke();
+            return true;
+        }
 
         public void TakeDamage(in DamageInfo info)
         {

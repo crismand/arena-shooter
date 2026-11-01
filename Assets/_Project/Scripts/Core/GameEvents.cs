@@ -74,7 +74,9 @@ namespace AS.Core
     {
         public readonly Vector2 Position;
         public readonly Color Color;
-        public PickupCollected(Vector2 position, Color color) { Position = position; Color = color; }
+        /// <summary>The power-up's name, as shown to the player.</summary>
+        public readonly string Label;
+        public PickupCollected(Vector2 position, Color color, string label = "") { Position = position; Color = color; Label = label; }
     }
 
     /// <summary>A power-up took effect. Picking up the same kind again republishes with a fresh duration.</summary>
@@ -83,6 +85,14 @@ namespace AS.Core
         public readonly string Label;
         public readonly float Duration;
         public PowerUpActivated(string label, float duration) { Label = label; Duration = duration; }
+    }
+
+    /// <summary>A bomb went off: enemies within <see cref="Radius"/> were hit and enemy bullets cleared.</summary>
+    public readonly struct BombDetonated
+    {
+        public readonly Vector2 Position;
+        public readonly float Radius;
+        public BombDetonated(Vector2 position, float radius) { Position = position; Radius = radius; }
     }
 
     public readonly struct ScoreChanged

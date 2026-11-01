@@ -23,6 +23,7 @@ namespace AS.Feedback
         [SerializeField] SoundCue playerHurt = new();
         [SerializeField] SoundCue playerDeath = new();
         [SerializeField] SoundCue pickup = new();
+        [SerializeField] SoundCue bomb = new();
         [SerializeField] SoundCue waveStarted = new();
         [SerializeField] SoundCue waveCleared = new();
 
@@ -55,6 +56,7 @@ namespace AS.Feedback
             EventBus.Subscribe<PlayerDamaged>(OnPlayerDamaged);
             EventBus.Subscribe<PlayerDied>(OnPlayerDied);
             EventBus.Subscribe<PickupCollected>(OnPickupCollected);
+            EventBus.Subscribe<BombDetonated>(OnBombDetonated);
             EventBus.Subscribe<WaveStarted>(OnWaveStarted);
             EventBus.Subscribe<WaveCleared>(OnWaveCleared);
         }
@@ -67,6 +69,7 @@ namespace AS.Feedback
             EventBus.Unsubscribe<PlayerDamaged>(OnPlayerDamaged);
             EventBus.Unsubscribe<PlayerDied>(OnPlayerDied);
             EventBus.Unsubscribe<PickupCollected>(OnPickupCollected);
+            EventBus.Unsubscribe<BombDetonated>(OnBombDetonated);
             EventBus.Unsubscribe<WaveStarted>(OnWaveStarted);
             EventBus.Unsubscribe<WaveCleared>(OnWaveCleared);
         }
@@ -77,6 +80,7 @@ namespace AS.Feedback
         void OnPlayerDamaged(PlayerDamaged _) => Play(playerHurt);
         void OnPlayerDied(PlayerDied _) => Play(playerDeath);
         void OnPickupCollected(PickupCollected _) => Play(pickup);
+        void OnBombDetonated(BombDetonated _) => Play(bomb);
         void OnWaveStarted(WaveStarted _) => Play(waveStarted);
         void OnWaveCleared(WaveCleared _) => Play(waveCleared);
 
