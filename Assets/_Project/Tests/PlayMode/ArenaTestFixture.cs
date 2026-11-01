@@ -25,6 +25,8 @@ namespace AS.Tests
         protected const string ChaserPrefabPath = "Assets/_Project/Prefabs/Enemies/Chaser.prefab";
         protected const string ShooterPrefabPath = "Assets/_Project/Prefabs/Enemies/Shooter.prefab";
         protected const string TankPrefabPath = "Assets/_Project/Prefabs/Enemies/Tank.prefab";
+        protected const string DasherPrefabPath = "Assets/_Project/Prefabs/Enemies/Dasher.prefab";
+        protected const string SplitterPrefabPath = "Assets/_Project/Prefabs/Enemies/Splitter.prefab";
         const string TestHighScoreKey = "AS.HighScore.Tests";
         const string TestSettingsPrefix = "AS.Settings.Tests.";
 

@@ -42,8 +42,8 @@ namespace AS.Tests
         [Test]
         public void TheExpectedAssetsExist()
         {
-            Assert.AreEqual(4, Assets<WaveDefinition>("Data/Waves").Count(), "waves");
-            Assert.AreEqual(3, PrefabsWith<EnemyBase>("Prefabs/Enemies").Count(), "enemy prefabs");
+            Assert.AreEqual(6, Assets<WaveDefinition>("Data/Waves").Count(), "waves");
+            Assert.AreEqual(6, PrefabsWith<EnemyBase>("Prefabs/Enemies").Count(), "enemy prefabs");
             Assert.AreEqual(3, Assets<PowerUp>("Data/PowerUps").Count(), "power-ups");
             Assert.AreEqual(5, PrefabsWith<PooledEffect>("Prefabs/Effects").Count(), "effect prefabs");
         }
@@ -69,6 +69,24 @@ namespace AS.Tests
             Assert.Greater(enemy.Data.ScoreValue, 0);
             Assert.IsNotNull(enemy.GetComponent<Rigidbody2D>());
             Assert.IsNotNull(enemy.GetComponent<Collider2D>());
+        }
+
+        [Test]
+        public void Splitter_SplitsIntoAnEnemyThatDoesNotSplitAgain()
+        {
+            var splitter = AssetDatabase.LoadAssetAtPath<Splitter>($"{Root}/Prefabs/Enemies/Splitter.prefab");
+            Assert.IsNotNull(splitter.ChildPrefab, "No child prefab.");
+            Assert.Greater(splitter.ChildCount, 0);
+            Assert.IsNotInstanceOf<Splitter>(splitter.ChildPrefab, "Children that split again would never end.");
+        }
+
+        [Test]
+        public void Dasher_TelegraphIsHiddenUntilItWindsUp()
+        {
+            var dasher = AssetDatabase.LoadAssetAtPath<Dasher>($"{Root}/Prefabs/Enemies/Dasher.prefab");
+            var telegraph = dasher.transform.Find("Visual/Telegraph");
+            Assert.IsNotNull(telegraph, "No telegraph.");
+            Assert.IsFalse(telegraph.gameObject.activeSelf);
         }
 
         [TestCaseSource(nameof(Weapons))]

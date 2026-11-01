@@ -46,6 +46,9 @@ namespace AS.EditorTools
         const string ChaserPrefabPath = Root + "/Prefabs/Enemies/Chaser.prefab";
         const string ShooterPrefabPath = Root + "/Prefabs/Enemies/Shooter.prefab";
         const string TankPrefabPath = Root + "/Prefabs/Enemies/Tank.prefab";
+        const string DasherPrefabPath = Root + "/Prefabs/Enemies/Dasher.prefab";
+        const string SplitterPrefabPath = Root + "/Prefabs/Enemies/Splitter.prefab";
+        const string SplitlingPrefabPath = Root + "/Prefabs/Enemies/Splitling.prefab";
         const string PickupPrefabPath = Root + "/Prefabs/Pickups/Pickup.prefab";
         const string TmpFontPath = "Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset";
         const string MixerPath = Root + "/Audio/ArenaMixer.mixer";
@@ -66,6 +69,8 @@ namespace AS.EditorTools
             (0.85f, new[] { (ChaserPrefabPath, 8), (ShooterPrefabPath, 2) }),
             (0.7f, new[] { (ChaserPrefabPath, 10), (ShooterPrefabPath, 3), (TankPrefabPath, 1) }),
             (0.6f, new[] { (ChaserPrefabPath, 12), (ShooterPrefabPath, 4), (TankPrefabPath, 2) }),
+            (0.7f, new[] { (ChaserPrefabPath, 8), (ShooterPrefabPath, 3), (TankPrefabPath, 1), (DasherPrefabPath, 3) }),
+            (0.65f, new[] { (ChaserPrefabPath, 8), (ShooterPrefabPath, 3), (TankPrefabPath, 1), (DasherPrefabPath, 3), (SplitterPrefabPath, 2) }),
         };
         static string WavePath(int index) => $"{Root}/Data/Waves/Wave_{index + 1:00}.asset";
 
@@ -81,6 +86,9 @@ namespace AS.EditorTools
         static readonly Color ChaserColor = new(1f, 0.32f, 0.36f);
         static readonly Color ShooterColor = new(0.78f, 0.45f, 1f);
         static readonly Color TankColor = new(0.62f, 0.16f, 0.2f);
+        static readonly Color DasherColor = new(1f, 0.62f, 0.18f);
+        static readonly Color SplitterColor = new(0.42f, 0.86f, 0.46f);
+        static readonly Color SplitlingColor = new(0.66f, 1f, 0.6f);
         static readonly Color EnemyBulletColor = new(1f, 0.45f, 0.85f);
         static readonly Color ShieldColor = new(0.45f, 0.8f, 1f, 0.35f);
 
@@ -136,6 +144,13 @@ namespace AS.EditorTools
                 SetEnemyStats(d, health: 2f, speed: 3f, acceleration: 15f, contactDamage: 1f, score: 25, dropChance: 0.15f));
             var tankData = CreateOrLoad<EnemyData>(Root + "/Data/Enemies/Enemy_Tank.asset", d =>
                 SetEnemyStats(d, health: 12f, speed: 1.6f, acceleration: 6f, contactDamage: 2f, score: 50, dropChance: 0.5f));
+            var dasherData = CreateOrLoad<EnemyData>(Root + "/Data/Enemies/Enemy_Dasher.asset", d =>
+                SetEnemyStats(d, health: 3f, speed: 2.5f, acceleration: 12f, contactDamage: 1f, score: 30, dropChance: 0.12f));
+            var splitterData = CreateOrLoad<EnemyData>(Root + "/Data/Enemies/Enemy_Splitter.asset", d =>
+                SetEnemyStats(d, health: 6f, speed: 1.8f, acceleration: 8f, contactDamage: 1f, score: 40, dropChance: 0.2f));
+            // Score and drops come mostly from the Splitter itself; its three children are worth little.
+            var splitlingData = CreateOrLoad<EnemyData>(Root + "/Data/Enemies/Enemy_Splitling.asset", d =>
+                SetEnemyStats(d, health: 1f, speed: 4f, acceleration: 30f, contactDamage: 1f, score: 5, dropChance: 0f));
 
             CreateEnemyPrefab<Chaser>("Chaser", ChaserPrefabPath, chaserData, triangle, ChaserColor, 0.9f, 0.4f, 1f, layers);
             // A Tank is just a Chaser with different data and a bigger body: no new code needed.
@@ -146,6 +161,25 @@ namespace AS.EditorTools
                 var weapon = shooter.gameObject.AddComponent<Weapon>();
                 SetRef(weapon, "data", enemyBlaster);
                 SetRef(shooter, "weapon", weapon);
+            });
+            CreateEnemyPrefab<Dasher>("Dasher", DasherPrefabPath, dasherData, triangle, DasherColor, 1f, 0.42f, 1.5f, layers, (dasher, visual) =>
+            {
+                // The charge's path, shown during the wind-up: dashSpeed x dashTime (6) units ahead.
+                var telegraph = Quad("Telegraph", visual, new Vector2(3.25f, 0f), new Vector2(5.5f, 0.14f), square, new Color(DasherColor.r, DasherColor.g, DasherColor.b, 0.35f), 3);
+                telegraph.SetActive(false);
+                SetRef(dasher, "telegraph", telegraph);
+                SetInt(dasher, "stopsDash", (1 << layers.Wall) | (1 << layers.Player));
+            });
+            CreateEnemyPrefab<Chaser>("Splitling", SplitlingPrefabPath, splitlingData, triangle, SplitlingColor, 0.5f, 0.22f, 0.4f, layers);
+            CreateEnemyPrefab<Splitter>("Splitter", SplitterPrefabPath, splitterData, circle, SplitterColor, 1.2f, 0.58f, 2f, layers, (splitter, visual) =>
+            {
+                // Three lobes hint at what it breaks into.
+                for (int i = 0; i < 3; i++)
+                {
+                    float angle = i * 120f * Mathf.Deg2Rad;
+                    Quad("Lobe", visual, new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * 0.22f, new Vector2(0.3f, 0.3f), circle, Color.Lerp(SplitterColor, Color.white, 0.45f), 9);
+                }
+                SetRef(splitter, "childPrefab", AssetDatabase.LoadAssetAtPath<EnemyBase>(SplitlingPrefabPath));
             });
             CreateWaves();
 
