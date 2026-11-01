@@ -57,7 +57,7 @@ namespace AS.Enemies
                 _pools[prefab] = pool = new PrefabPool<EnemyBase>(prefab, transform);
 
             var enemy = pool.Get(position, Quaternion.identity);
-            enemy.Init(target, pool.Release);
+            enemy.Init(target, pool.Release, this);
             return enemy;
         }
 
