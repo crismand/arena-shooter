@@ -1,12 +1,14 @@
 """Compare the trained agent with a random and an idle one on the training build.
 
 Each policy plays the same number of episodes. The agent reports every episode's survival time
-(game seconds), kills and whether it died through ML-Agents' stats channel, and this script
-prints the means. Milestone 1 is met when the trained model beats both baselines on mean survival
-and on mean kills.
+(game seconds), kills, whether it died and the highest wave it reached through ML-Agents' stats
+channel, and this script prints the means and how often it reached the first boss. The trained
+model passes when it beats both baselines on mean survival and on mean kills; with --against, it
+must also beat that earlier evaluation's trained model on both and reach the boss in most episodes.
 
     ml/.venv/Scripts/python ml/evaluate.py --model ml/results/m1_001/ArenaAgent.onnx
     ml/.venv/Scripts/python ml/evaluate.py --episodes 50 --json ml/results/m1_001/evaluation.json
+    ml/.venv/Scripts/python ml/evaluate.py --model ml/results/m2_001/ArenaAgent.onnx --against ml/results/m1_001/evaluation_v1.3.json
 """
 
 import argparse
@@ -29,6 +31,9 @@ DEFAULT_BUILD = ROOT / "Builds" / "Training" / "ArenaTraining.exe"
 SURVIVAL = "Arena/Survival Time"
 KILLS = "Arena/Kills"
 DIED = "Arena/Died"
+WAVE = "Arena/Wave Reached"
+# The first boss wave (WaveDirector's bossEvery).
+BOSS_WAVE = 5
 
 
 class IdlePolicy:
@@ -91,7 +96,7 @@ def play(build, policy, episodes, seed, worker_id, time_scale):
     env = UnityEnvironment(
         file_name=str(build), worker_id=worker_id, seed=seed, no_graphics=True, side_channels=[engine, stats]
     )
-    collected = {SURVIVAL: [], KILLS: [], DIED: []}
+    collected = {SURVIVAL: [], KILLS: [], DIED: [], WAVE: []}
     try:
         engine.set_configuration_parameters(time_scale=time_scale)
         env.reset()
@@ -112,7 +117,7 @@ def play(build, policy, episodes, seed, worker_id, time_scale):
 
 
 def summarise(name, results):
-    survival, kills, died = results[SURVIVAL], results[KILLS], results[DIED]
+    survival, kills, died, waves = results[SURVIVAL], results[KILLS], results[DIED], results[WAVE]
     return {
         "policy": name,
         "episodes": len(kills),
@@ -121,6 +126,8 @@ def summarise(name, results):
         "kills_mean": statistics.fmean(kills),
         "kills_stdev": statistics.stdev(kills) if len(kills) > 1 else 0.0,
         "death_rate": statistics.fmean(died),
+        "wave_mean": statistics.fmean(waves),
+        "boss_rate": statistics.fmean(1.0 if w >= BOSS_WAVE else 0.0 for w in waves),
     }
 
 
@@ -133,6 +140,7 @@ def main():
     parser.add_argument("--time-scale", type=float, default=20.0)
     parser.add_argument("--worker-id", type=int, default=10, help="port offset, clear of a training run's (default: %(default)s)")
     parser.add_argument("--json", type=Path, help="also write the summary here")
+    parser.add_argument("--against", type=Path, help="an earlier --json whose trained model this one must beat")
     args = parser.parse_args()
 
     if not args.env.exists():
@@ -142,6 +150,12 @@ def main():
         if not args.model.exists():
             sys.exit(f"No model at {args.model}.")
         policies.append(OnnxPolicy(args.model))
+    earlier = None
+    if args.against:
+        if not args.model:
+            sys.exit("--against needs --model.")
+        earlier = json.loads(args.against.read_text())["results"][-1]
+        earlier["policy"] = "earlier"
 
     rows = []
     for policy in policies:
@@ -150,13 +164,14 @@ def main():
         rows.append(summarise(policy.name, results))
         print(f"{policy.name}: {args.episodes} episodes in {time.monotonic() - started:.0f} s", file=sys.stderr)
 
-    print(f"\n{'policy':<8} {'episodes':>8} {'survival (s)':>16} {'kills':>14} {'died':>6}")
-    for r in rows:
+    print(f"\n{'policy':<8} {'episodes':>8} {'survival (s)':>16} {'kills':>14} {'died':>6} {'wave':>6} {'boss':>6}")
+    for r in rows + ([earlier] if earlier else []):
         print(
             f"{r['policy']:<8} {r['episodes']:>8} "
             f"{r['survival_mean']:>8.1f} +/- {r['survival_stdev']:<5.1f} "
             f"{r['kills_mean']:>6.1f} +/- {r['kills_stdev']:<5.1f} "
-            f"{r['death_rate']:>6.0%}"
+            f"{r['death_rate']:>6.0%} "
+            f"{r.get('wave_mean', float('nan')):>6.1f} {r.get('boss_rate', float('nan')):>6.0%}"
         )
 
     if args.model:
@@ -165,6 +180,10 @@ def main():
             trained["survival_mean"] > b["survival_mean"] and trained["kills_mean"] > b["kills_mean"] for b in baselines
         )
         print(f"\nTrained beats both baselines on survival and kills: {'yes' if beats else 'no'}")
+        if earlier:
+            better = trained["survival_mean"] > earlier["survival_mean"] and trained["kills_mean"] > earlier["kills_mean"]
+            print(f"Trained beats the earlier model on survival and kills: {'yes' if better else 'no'}")
+            print(f"Trained reaches the first boss in most episodes: {'yes' if trained['boss_rate'] > 0.5 else 'no'}")
 
     if args.json:
         args.json.parent.mkdir(parents=True, exist_ok=True)

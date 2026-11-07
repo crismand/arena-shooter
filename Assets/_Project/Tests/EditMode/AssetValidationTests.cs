@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using AS.Agents;
 using AS.Combat;
 using AS.Core;
 using AS.Enemies;
@@ -180,6 +181,22 @@ namespace AS.Tests
             var model = AssetDatabase.LoadMainAssetAtPath($"{Root}/Models/ArenaAgent.onnx");
             Assert.IsNotNull(model, "No model at Models/ArenaAgent.onnx. Copy one in from ml/results.");
             Assert.AreEqual("ModelAsset", model.GetType().Name);
+        }
+
+        // A model trained on other observations doesn't fail cleanly: Watch AI feeds it the wrong
+        // shapes and the editor can crash later. So check the shapes here.
+        [Test]
+        public void TheTrainedModel_MatchesTheAgentsObservations()
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<Unity.InferenceEngine.ModelAsset>($"{Root}/Models/ArenaAgent.onnx");
+            var inputs = Unity.InferenceEngine.ModelLoader.Load(asset).inputs.Where(i => i.name.StartsWith("obs_")).ToArray();
+
+            Assert.IsTrue(inputs.Any(i => i.shape.rank == 2 && i.shape.Get(1) == ArenaAgent.VectorObservationSize),
+                $"The model has no vector input of {ArenaAgent.VectorObservationSize}; retrain, or copy in the model for this agent.");
+            Assert.IsTrue(inputs.Any(i => i.shape.rank == 3 && i.shape.Get(1) == ArenaAgent.MaxEntities && i.shape.Get(2) == ArenaAgent.EntityObservationSize),
+                $"The model has no entity input of {ArenaAgent.MaxEntities} x {ArenaAgent.EntityObservationSize}.");
+            Assert.IsTrue(inputs.Any(i => i.shape.rank == 3 && i.shape.Get(1) == ArenaAgent.MaxBullets && i.shape.Get(2) == ArenaAgent.BulletObservationSize),
+                $"The model has no bullet input of {ArenaAgent.MaxBullets} x {ArenaAgent.BulletObservationSize}.");
         }
 
         [Test]

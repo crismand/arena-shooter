@@ -21,10 +21,10 @@ namespace AS.Core
 
         /// <summary>
         /// Starts the arena over without reloading the scene: the player is restored, enemies,
-        /// bullets and pickups go back to their pools, and the waves begin again from wave 1.
-        /// Each system does its own part when it hears <see cref="ArenaReset"/>.
+        /// bullets and pickups go back to their pools, and the waves begin again from
+        /// <paramref name="firstWave"/>. Each system does its own part when it hears <see cref="ArenaReset"/>.
         /// </summary>
-        public void ResetArena() => Events.Publish(new ArenaReset());
+        public void ResetArena(int firstWave = 1) => Events.Publish(new ArenaReset(firstWave));
 
         /// <summary>The arena <paramref name="component"/> is in, or null if it isn't under one.</summary>
         public static Arena Of(Component component) => component.GetComponentInParent<Arena>(includeInactive: true);

@@ -1,7 +1,7 @@
 {
     "name": "AS.Agents",
     "rootNamespace": "AS.Agents",
-    "references": ["AS.Core", "AS.Combat", "AS.Player", "Unity.ML-Agents"],
+    "references": ["AS.Core", "AS.Combat", "AS.Player", "AS.Enemies", "AS.Pickups", "Unity.ML-Agents"],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

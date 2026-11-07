@@ -135,7 +135,12 @@ namespace AS.Core
     /// after dying, a disabled wave director, pooled enemies) subscribe for their whole lifetime,
     /// in Awake and OnDestroy, rather than in OnEnable.
     /// </summary>
-    public readonly struct ArenaReset { }
+    public readonly struct ArenaReset
+    {
+        /// <summary>The wave the run starts at. Below 1 (as in a default <c>new ArenaReset()</c>) means wave 1.</summary>
+        public readonly int FirstWave;
+        public ArenaReset(int firstWave) { FirstWave = firstWave; }
+    }
 
     public readonly struct WaveCleared
     {

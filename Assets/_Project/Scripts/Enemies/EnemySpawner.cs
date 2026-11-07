@@ -42,6 +42,13 @@ namespace AS.Enemies
             }
         }
 
+        /// <summary>Adds every enemy that's out to <paramref name="results"/>.</summary>
+        public void GetActive(List<EnemyBase> results)
+        {
+            foreach (var pool in _pools.Values)
+                foreach (var enemy in pool.Active) results.Add(enemy);
+        }
+
         /// <summary>Spawns at a random safe spawn point. False if the target is gone or every point is too close.</summary>
         public bool TrySpawn(EnemyBase prefab) => TrySpawn(prefab, out _);
 
