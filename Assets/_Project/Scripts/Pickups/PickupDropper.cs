@@ -20,6 +20,12 @@ namespace AS.Pickups
 
         public int ActiveCount => _pool.CountActive;
 
+        /// <summary>Adds every pickup that's out to <paramref name="results"/>.</summary>
+        public void GetActive(List<Pickup> results)
+        {
+            foreach (var pickup in _pool.Active) results.Add(pickup);
+        }
+
         void Awake()
         {
             _pool = new PrefabPool<Pickup>(pickupPrefab, transform);

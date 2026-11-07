@@ -11,7 +11,8 @@ namespace AS.Waves
     /// enemies and shorter spawn intervals each wave. Every <see cref="bossEvery"/>th wave is a boss
     /// wave instead, slotted between the others (so the authored waves all still play), with each boss
     /// tougher than the last. A wave ends when everything it spawned, and anything that spawned, is
-    /// dead. Stops when the player in its arena dies, and starts over from wave 1 when the arena resets.
+    /// dead. Stops when the player in its arena dies, and starts over when the arena resets: from wave 1,
+    /// or from the reset's first wave (training starts some episodes later on).
     /// </summary>
     public class WaveDirector : MonoBehaviour
     {
@@ -52,11 +53,11 @@ namespace AS.Waves
 
         void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
 
-        /// <summary>Back to before wave 1, then running again (restarted if it was still going).</summary>
-        void OnArenaReset(ArenaReset _)
+        /// <summary>Back to before the first wave, then running again (restarted if it was still going).</summary>
+        void OnArenaReset(ArenaReset e)
         {
             enabled = false;
-            CurrentWave = 0;
+            CurrentWave = Mathf.Max(1, e.FirstWave) - 1;
             enabled = true;
         }
 

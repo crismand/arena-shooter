@@ -26,6 +26,9 @@ namespace AS.Enemies
 
         public EnemyData Data => data;
         public Health Health { get; private set; }
+        public Vector2 Velocity => Body.linearVelocity;
+        /// <summary>Winding up to charge, or charging: the moment to sidestep. Only Dashers do.</summary>
+        public virtual bool IsCharging => false;
         protected Rigidbody2D Body { get; private set; }
         /// <summary>The events of the arena this enemy was spawned into.</summary>
         protected EventChannel Events { get; private set; }

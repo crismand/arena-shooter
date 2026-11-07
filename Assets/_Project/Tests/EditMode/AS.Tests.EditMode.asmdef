@@ -10,7 +10,8 @@
         "AS.Feedback",
         "AS.Pickups",
         "AS.Waves",
-        "AS.Agents"
+        "AS.Agents",
+        "Unity.InferenceEngine"
     ],
     "includePlatforms": ["Editor"],
     "excludePlatforms": [],

@@ -32,6 +32,8 @@ namespace AS.Core
         }
 
         public int CountActive => _pool.CountActive;
+        /// <summary>The items that are out.</summary>
+        public IReadOnlyCollection<T> Active => _active;
 
         public T Get(Vector3 position, Quaternion rotation)
         {

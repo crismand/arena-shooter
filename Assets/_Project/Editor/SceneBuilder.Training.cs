@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using AS.Agents;
 using AS.Combat;
 using AS.Core;
+using AS.Enemies;
+using AS.Pickups;
 using AS.Player;
 using Unity.InferenceEngine;
 using Unity.MLAgents;
@@ -18,8 +20,19 @@ namespace AS.EditorTools
     {
         const string TrainingScenePath = Root + "/Scenes/Training.unity";
         const string ModelPath = Root + "/Models/ArenaAgent.onnx";
-        /// <summary>Agent steps (physics steps) per training episode: 60 seconds.</summary>
-        const int TrainingMaxStep = 3000;
+        /// <summary>Agent steps (physics steps) per training episode: 5 minutes, long enough to reach the first boss.</summary>
+        const int TrainingMaxStep = 15000;
+        /// <summary>The agent's enemy kinds, in one-hot order. Changing it means retraining.</summary>
+        static readonly string[] AgentEnemyKindPaths =
+        {
+            Root + "/Data/Enemies/Enemy_Chaser.asset",
+            Root + "/Data/Enemies/Enemy_Shooter.asset",
+            Root + "/Data/Enemies/Enemy_Tank.asset",
+            Root + "/Data/Enemies/Enemy_Dasher.asset",
+            Root + "/Data/Enemies/Enemy_Splitter.asset",
+            Root + "/Data/Enemies/Enemy_Splitling.asset",
+            Root + "/Data/Enemies/Enemy_Boss.asset",
+        };
 
         /// <summary>
         /// The Training scene: one arena with the same player, enemies, waves and pickups as the game,
@@ -70,16 +83,27 @@ namespace AS.EditorTools
                 parameters.DeterministicInference = true;
             }
 
-            // World-aligned rays all around the player. Only the layers worth seeing, which also
-            // keeps the camera-bounds trigger and the player's own collider out of them.
+            // World-aligned rays all around the player, for enemy bullets and walls; enemies and
+            // pickups come through the entity list. Only those layers, which also keeps the
+            // camera-bounds trigger and the player's own collider out of them.
             var rays = go.AddComponent<RayPerceptionSensorComponent2D>();
             rays.SensorName = "Rays";
-            rays.DetectableTags = new List<string>(Tags.All);
+            rays.DetectableTags = new List<string> { Tags.EnemyProjectile, Tags.Wall };
             rays.RaysPerDirection = 8;
             rays.MaxRayDegrees = 180f;
             rays.RayLength = 20f;
             rays.SphereCastRadius = 0.3f;
-            rays.RayLayerMask = (1 << layers.Enemy) | (1 << layers.EnemyShot) | (1 << layers.Wall) | (1 << layers.Pickup);
+            rays.RayLayerMask = (1 << layers.EnemyShot) | (1 << layers.Wall);
+
+            var entities = go.AddComponent<BufferSensorComponent>();
+            entities.SensorName = "Entities";
+            entities.ObservableSize = ArenaAgent.EntityObservationSize;
+            entities.MaxNumObservables = ArenaAgent.MaxEntities;
+
+            var bullets = go.AddComponent<BufferSensorComponent>();
+            bullets.SensorName = "Bullets";
+            bullets.ObservableSize = ArenaAgent.BulletObservationSize;
+            bullets.MaxNumObservables = ArenaAgent.MaxBullets;
 
             var agent = go.AddComponent<ArenaAgent>();
             SetRef(agent, "arena", arena);
@@ -89,6 +113,12 @@ namespace AS.EditorTools
             SetRef(agent, "aim", player.GetComponent<PlayerAim>());
             SetRef(agent, "weapon", player.GetComponent<Weapon>());
             Modify(agent, "arenaHalfSize", p => p.vector2Value = new Vector2(HalfWidth, HalfHeight));
+            SetRef(agent, "spawner", arena.GetComponentInChildren<EnemySpawner>());
+            SetRef(agent, "pickups", arena.GetComponentInChildren<PickupDropper>());
+            SetRef(agent, "entitySensor", entities);
+            SetRef(agent, "bulletSensor", bullets);
+            SetList(agent, "enemyKinds", Array.ConvertAll(AgentEnemyKindPaths, p => (UnityEngine.Object)AssetDatabase.LoadAssetAtPath<EnemyData>(p)));
+            SetList(agent, "pickupKinds", Array.ConvertAll(PowerUpPaths, p => (UnityEngine.Object)AssetDatabase.LoadAssetAtPath<PowerUp>(p)));
 
             go.AddComponent<DecisionRequester>().DecisionPeriod = 5;
             return agent;

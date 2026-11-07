@@ -34,6 +34,7 @@ namespace AS.Enemies
         Vector2 _dashDirection;
 
         public Phase Current { get; private set; }
+        public override bool IsCharging => Current is Phase.WindUp or Phase.Dash;
 
         Vector2 ToTarget => Target.position - transform.position;
 
