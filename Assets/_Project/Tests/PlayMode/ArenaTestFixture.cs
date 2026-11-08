@@ -18,13 +18,16 @@ namespace AS.Tests
     /// handles to the main scene objects, and helpers. The wave director is switched off unless a
     /// test asks for waves, so enemies only appear where the test puts them, and the run starts
     /// past the title screen unless a test asks to stay on it. High scores and settings go to
-    /// throwaway PlayerPrefs keys, so tests never touch the real ones.
+    /// throwaway PlayerPrefs keys, so tests never touch the real ones. The field guide counts as seen,
+    /// so Play starts a run at once; the guide's own tests turn that off.
     /// </summary>
     public abstract class ArenaTestFixture : InputTestFixture
     {
         protected const string ChaserPrefabPath = "Assets/_Project/Prefabs/Enemies/Chaser.prefab";
         protected const string ShooterPrefabPath = "Assets/_Project/Prefabs/Enemies/Shooter.prefab";
         protected const string TankPrefabPath = "Assets/_Project/Prefabs/Enemies/Tank.prefab";
+        protected const string DasherPrefabPath = "Assets/_Project/Prefabs/Enemies/Dasher.prefab";
+        protected const string SplitterPrefabPath = "Assets/_Project/Prefabs/Enemies/Splitter.prefab";
         const string TestHighScoreKey = "AS.HighScore.Tests";
         const string TestSettingsPrefix = "AS.Settings.Tests.";
 
@@ -47,6 +50,7 @@ namespace AS.Tests
             HighScoreStore.Clear();
             GameSettings.KeyPrefix = TestSettingsPrefix;
             GameSettings.Clear();
+            GameSettings.GuideSeen = true;
         }
 
         public override void TearDown()

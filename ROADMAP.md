@@ -41,17 +41,21 @@ The first three steps are refactors that more arenas and bosses need anyway, so 
 
 The pass mark: over the evaluation run, the trained agent beats both the random and the idle agent on mean survival time and on mean kills, and plays the real arena in the game. It passed: over 50 episodes each, the trained agent survived 48.6 s on average with 11.5 kills, against 13.7 s and 2.6 kills for a random agent and 9.3 s and none for an idle one.
 
-### Next for the agent
+Later milestones for the agent: a playtester that reports difficulty per wave, room or boss; self-play duels; learning from recorded human play; a curriculum across several arenas.
 
-Watching the first model play showed three gaps, all from what it observes and how it's rewarded:
+## Done: v1.3.0, more game and a smarter agent
 
-- [ ] **It only sees a few units out.** Its 17 rays spread apart with distance and stop at walls, so enemies further away or behind obstacles are invisible. Give it a list of every enemy and pickup (a `BufferSensor`) plus the number of enemies left, and keep the rays for walls and bullets.
-- [ ] **It doesn't hunt down enemies stuck on obstacles.** It can't see them, and the per-step survival reward makes waiting pay. Reward clearing a wave, and cost each step while enemies remain instead.
-- [ ] **It ignores pickups.** Nothing rewards collecting one. Add a small reward on `PickupCollected`.
+Two new enemies, three new pickups and a boss, then a new agent trained on the bigger game. The game content comes first so that the agent learns the game as it ships. Each step is a branch off `dev`.
 
-New observations change the model's inputs, so this is a fresh training run (`m2`), not a continuation of `m1_001`.
+| Step | What it adds |
+|---|---|
+| 1. Dasher and Splitter | **Dasher**: stops, telegraphs (flashes and turns to face the player), then charges in a straight line and skids to a stop; it can't steer mid-charge, so sidestepping beats it. **Splitter**: a slow, tough blob that breaks into three small fast Splitlings when killed; the children count toward the wave, so it isn't cleared until they're dead too. New authored waves 5 and 6 introduce them before endless scaling takes over. |
+| 2. New pickups | **Health**: restores one point at once, up to the maximum. **Bomb**: on pickup, damages every enemy in the arena and clears enemy bullets, with a big shake and flash. **Homing**: a timed weapon override whose bullets steer toward the nearest enemy. Drop weights per pickup, so Health and Bomb stay rarer than the weapon boosts. |
+| 3. Boss | Every fifth wave is a boss wave: one large boss with two attack phases (turning rings of slow bullets, then fewer rings plus summoned Chasers below half health, with aimed three-way bursts from the second boss on). A boss health bar on the HUD, a warning banner when it arrives, and a guaranteed pickup drop. Endless scaling grows the boss's health on later boss waves. |
+| 4. Agent m3 | What watching `m1` showed, plus the new content: a `BufferSensor` listing every enemy (type, position, velocity, health, whether it's charging) and pickup (type, position), plus the number of enemies left and the wave, with the rays kept for walls and bullets. Rewards: clearing a wave pays (a boss wave pays double), each step costs a little while enemies remain (replacing the survival reward, which made waiting pay), collecting a pickup pays a little, and hits and deaths cost more than they did for `m1`. Three `m2` runs stalled around wave 2: the first two with these observations (the second with the bigger hit, death and wave rewards), and a third that started episodes at random waves 1-5, which made it worse at the early waves. `m3` adds a second `BufferSensor` with the 24 nearest enemy bullets (position and velocity), since the rays missed most of a spread; trained fresh for 10M steps, it got a wave further than `m2`. |
+| 5. Release | README, wiki (Gameplay, ML Agent, Releases) and roadmap updated, Watch AI on `m3`, and the v1.3.0 tag. Done. |
 
-Later milestones: the agent as a playtester that reports difficulty per wave, room or boss; self-play duels; learning from recorded human play; a curriculum across several arenas.
+The pass mark was: over 50 evaluation episodes in the v1.3.0 arena, beat `m1` on mean survival time and mean kills, reach the first boss wave in most episodes, and keep beating the random and idle agents. `m3` ships having met part of it. It beats `m1` on kills (21.1 against 12.9) and waves reached (3.0 against 2.0), and both baselines. It doesn't beat `m1` on survival (83 s against 152 s), because `m1` lasts by keeping out of the way rather than clearing waves. It never reaches the boss. The boss stays the target for the next agent.
 
 ## Ideas for next
 
@@ -61,10 +65,7 @@ Nothing below is committed to yet. These are candidates, roughly in the order th
 - [ ] Gamepad rumble on hits and deaths.
 
 ### More game
-- [ ] New enemies: a Dasher that charges in straight lines, a Splitter that breaks into smaller enemies.
-- [ ] A boss every few waves.
 - [ ] More arenas, moved between without reloading the whole game.
-- [ ] New pickups: a health pickup, a screen-clearing bomb, homing shots.
 - [ ] Score multiplier for kills in quick succession.
 - [ ] Local top-10 leaderboard instead of a single best score.
 

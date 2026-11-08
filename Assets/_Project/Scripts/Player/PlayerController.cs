@@ -45,12 +45,14 @@ namespace AS.Player
         {
             health.Damaged += OnDamaged;
             health.Died += OnDied;
+            health.Healed += PublishHealth;
         }
 
         void OnDisable()
         {
             health.Damaged -= OnDamaged;
             health.Died -= OnDied;
+            health.Healed -= PublishHealth;
         }
 
         void Start() => PublishHealth();

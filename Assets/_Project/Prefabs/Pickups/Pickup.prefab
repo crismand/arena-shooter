@@ -295,5 +295,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: AS.Pickups::AS.Pickups.Pickup
   spriteRenderer: {fileID: 8043105375148787723}
   spinSpeed: 120
+  pulseRate: 1.5
+  pulseSize: 0.12
   blinkWarning: 3
   blinkInterval: 0.15

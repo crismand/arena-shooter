@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using AS.Agents;
 using AS.Combat;
 using AS.Core;
 using AS.Enemies;
@@ -42,10 +43,10 @@ namespace AS.Tests
         [Test]
         public void TheExpectedAssetsExist()
         {
-            Assert.AreEqual(4, Assets<WaveDefinition>("Data/Waves").Count(), "waves");
-            Assert.AreEqual(3, PrefabsWith<EnemyBase>("Prefabs/Enemies").Count(), "enemy prefabs");
-            Assert.AreEqual(3, Assets<PowerUp>("Data/PowerUps").Count(), "power-ups");
-            Assert.AreEqual(5, PrefabsWith<PooledEffect>("Prefabs/Effects").Count(), "effect prefabs");
+            Assert.AreEqual(6, Assets<WaveDefinition>("Data/Waves").Count(), "waves");
+            Assert.AreEqual(7, PrefabsWith<EnemyBase>("Prefabs/Enemies").Count(), "enemy prefabs");
+            Assert.AreEqual(6, Assets<PowerUp>("Data/PowerUps").Count(), "power-ups");
+            Assert.AreEqual(6, PrefabsWith<PooledEffect>("Prefabs/Effects").Count(), "effect prefabs");
         }
 
         [TestCaseSource(nameof(Waves))]
@@ -71,6 +72,35 @@ namespace AS.Tests
             Assert.IsNotNull(enemy.GetComponent<Collider2D>());
         }
 
+        [Test]
+        public void Splitter_SplitsIntoAnEnemyThatDoesNotSplitAgain()
+        {
+            var splitter = AssetDatabase.LoadAssetAtPath<Splitter>($"{Root}/Prefabs/Enemies/Splitter.prefab");
+            Assert.IsNotNull(splitter.ChildPrefab, "No child prefab.");
+            Assert.Greater(splitter.ChildCount, 0);
+            Assert.IsNotInstanceOf<Splitter>(splitter.ChildPrefab, "Children that split again would never end.");
+        }
+
+        [Test]
+        public void Boss_HasBothWeapons_AndAlwaysDrops()
+        {
+            var boss = AssetDatabase.LoadAssetAtPath<Boss>($"{Root}/Prefabs/Enemies/Boss.prefab");
+            var weapons = boss.GetComponents<Weapon>();
+            Assert.AreEqual(2, weapons.Length, "A ring weapon and a burst weapon.");
+            foreach (var weapon in weapons)
+                Assert.IsNotNull(weapon.Data, "A boss weapon has no WeaponData.");
+            Assert.AreEqual(1f, boss.Data.DropChance);
+        }
+
+        [Test]
+        public void Dasher_TelegraphIsHiddenUntilItWindsUp()
+        {
+            var dasher = AssetDatabase.LoadAssetAtPath<Dasher>($"{Root}/Prefabs/Enemies/Dasher.prefab");
+            var telegraph = dasher.transform.Find("Visual/Telegraph");
+            Assert.IsNotNull(telegraph, "No telegraph.");
+            Assert.IsFalse(telegraph.gameObject.activeSelf);
+        }
+
         [TestCaseSource(nameof(Weapons))]
         public void Weapon_HasAProjectile_AndCanFire(WeaponData weapon)
         {
@@ -81,12 +111,33 @@ namespace AS.Tests
         }
 
         [TestCaseSource(nameof(PowerUps))]
-        public void PowerUp_HasALabel_AndADuration(PowerUp powerUp)
+        public void PowerUp_HasALabel_ADropWeight_AndWhatItNeeds(PowerUp powerUp)
         {
             Assert.IsFalse(string.IsNullOrWhiteSpace(powerUp.Label));
-            Assert.Greater(powerUp.Duration, 0f);
-            if (powerUp is WeaponPowerUp weaponPowerUp)
-                Assert.IsNotNull(weaponPowerUp.Weapon, "Weapon power-up has no WeaponData.");
+            Assert.Greater(powerUp.DropWeight, 0f, "A zero drop weight never drops.");
+            if (!powerUp.IsInstant) Assert.Greater(powerUp.Duration, 0f);
+            switch (powerUp)
+            {
+                case WeaponPowerUp weaponPowerUp:
+                    Assert.IsNotNull(weaponPowerUp.Weapon, "Weapon power-up has no WeaponData.");
+                    break;
+                case HealthPowerUp healthPowerUp:
+                    Assert.Greater(healthPowerUp.Amount, 0f);
+                    Assert.IsNotNull(healthPowerUp.Icon, "Health should look like a heart, not a diamond.");
+                    break;
+                case BombPowerUp bomb:
+                    Assert.Greater(bomb.Damage, 0f);
+                    // From any corner, the far corner of the 32 x 20 arena is about 38 units away.
+                    Assert.GreaterOrEqual(bomb.Radius, 38f, "The bomb should reach the whole arena.");
+                    break;
+            }
+        }
+
+        [Test]
+        public void HomingWeapon_FiresBulletsThatHomeOnEnemies()
+        {
+            var homing = AssetDatabase.LoadAssetAtPath<WeaponData>($"{Root}/Data/Weapons/Weapon_Homing.asset");
+            Assert.IsNotNull(homing.ProjectilePrefab.GetComponent<Homing>());
         }
 
         [TestCaseSource(nameof(Effects))]
@@ -130,6 +181,22 @@ namespace AS.Tests
             var model = AssetDatabase.LoadMainAssetAtPath($"{Root}/Models/ArenaAgent.onnx");
             Assert.IsNotNull(model, "No model at Models/ArenaAgent.onnx. Copy one in from ml/results.");
             Assert.AreEqual("ModelAsset", model.GetType().Name);
+        }
+
+        // A model trained on other observations doesn't fail cleanly: Watch AI feeds it the wrong
+        // shapes and the editor can crash later. So check the shapes here.
+        [Test]
+        public void TheTrainedModel_MatchesTheAgentsObservations()
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<Unity.InferenceEngine.ModelAsset>($"{Root}/Models/ArenaAgent.onnx");
+            var inputs = Unity.InferenceEngine.ModelLoader.Load(asset).inputs.Where(i => i.name.StartsWith("obs_")).ToArray();
+
+            Assert.IsTrue(inputs.Any(i => i.shape.rank == 2 && i.shape.Get(1) == ArenaAgent.VectorObservationSize),
+                $"The model has no vector input of {ArenaAgent.VectorObservationSize}; retrain, or copy in the model for this agent.");
+            Assert.IsTrue(inputs.Any(i => i.shape.rank == 3 && i.shape.Get(1) == ArenaAgent.MaxEntities && i.shape.Get(2) == ArenaAgent.EntityObservationSize),
+                $"The model has no entity input of {ArenaAgent.MaxEntities} x {ArenaAgent.EntityObservationSize}.");
+            Assert.IsTrue(inputs.Any(i => i.shape.rank == 3 && i.shape.Get(1) == ArenaAgent.MaxBullets && i.shape.Get(2) == ArenaAgent.BulletObservationSize),
+                $"The model has no bullet input of {ArenaAgent.MaxBullets} x {ArenaAgent.BulletObservationSize}.");
         }
 
         [Test]

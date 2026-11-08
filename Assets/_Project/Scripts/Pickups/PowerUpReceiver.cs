@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using AS.Combat;
 using AS.Core;
 using UnityEngine;
@@ -5,8 +6,9 @@ using UnityEngine;
 namespace AS.Pickups
 {
     /// <summary>
-    /// Sits on the player and carries out power-up effects with timers: a weapon override and a
-    /// shield. Picking up the same kind again restarts its timer; a new weapon boost replaces the old one.
+    /// Sits on the player and carries out power-up effects: timed ones (a weapon override and a
+    /// shield) and instant ones (healing and the bomb). Picking up the same timed kind again restarts
+    /// its timer; a new weapon boost replaces the old one.
     /// </summary>
     public class PowerUpReceiver : MonoBehaviour
     {
@@ -14,9 +16,14 @@ namespace AS.Pickups
         [SerializeField] Health health;
         [Tooltip("Shown while the shield is up.")]
         [SerializeField] GameObject shieldVisual;
+        [Tooltip("Layers a bomb damages.")]
+        [SerializeField] LayerMask bombTargets;
+        [Tooltip("Layers of projectiles a bomb clears.")]
+        [SerializeField] LayerMask bombClears;
 
         float _weaponBoostEndsAt;
         float _shieldEndsAt;
+        readonly HashSet<IDamageable> _bombed = new();
 
         public bool HasWeaponBoost => _weaponBoostEndsAt > 0f;
         public bool HasShield => _shieldEndsAt > 0f;
@@ -53,6 +60,40 @@ namespace AS.Pickups
             _shieldEndsAt = Time.time + duration;
             if (shieldVisual != null) shieldVisual.SetActive(true);
             _events.Publish(new PowerUpActivated(label, duration));
+        }
+
+        /// <summary>Restores up to <paramref name="amount"/> health. False if it was already full.</summary>
+        public bool Heal(float amount) => health.Heal(amount);
+
+        /// <summary>
+        /// Clears enemy projectiles and damages every target within <paramref name="radius"/> in this
+        /// arena (the radius is meant to cover the whole arena). Returns how many targets were hit.
+        /// </summary>
+        public int DetonateBomb(float damage, float radius)
+        {
+            Vector2 origin = transform.position;
+            var arena = Arena.Of(this);
+
+            // Other arenas can share the space (training), so only touch things in this one.
+            foreach (var hit in Physics2D.OverlapCircleAll(origin, radius, bombClears))
+            {
+                var projectile = hit.GetComponentInParent<Projectile>();
+                if (projectile != null && Arena.Of(projectile) == arena) projectile.Despawn();
+            }
+
+            int count = 0;
+            _bombed.Clear();
+            foreach (var hit in Physics2D.OverlapCircleAll(origin, radius, bombTargets))
+            {
+                var target = hit.GetComponentInParent<IDamageable>();
+                if (target == null || Arena.Of(hit) != arena || !_bombed.Add(target)) continue;
+                Vector2 direction = ((Vector2)hit.transform.position - origin).normalized;
+                target.TakeDamage(new DamageInfo(damage, direction, gameObject));
+                count++;
+            }
+
+            _events.Publish(new BombDetonated(origin, radius));
+            return count;
         }
 
         void Update()

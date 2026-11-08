@@ -8,8 +8,11 @@ namespace AS.Waves
 {
     /// <summary>
     /// Runs the authored waves in order, then keeps going with the last one scaled up: more
-    /// enemies and shorter spawn intervals each wave. A wave ends when everything it spawned is
-    /// dead. Stops when the player in its arena dies, and starts over from wave 1 when the arena resets.
+    /// enemies and shorter spawn intervals each wave. Every <see cref="bossEvery"/>th wave is a boss
+    /// wave instead, slotted between the others (so the authored waves all still play), with each boss
+    /// tougher than the last. A wave ends when everything it spawned, and anything that spawned, is
+    /// dead. Stops when the player in its arena dies, and starts over when the arena resets: from wave 1,
+    /// or from the reset's first wave (training starts some episodes later on).
     /// </summary>
     public class WaveDirector : MonoBehaviour
     {
@@ -27,6 +30,15 @@ namespace AS.Waves
         [SerializeField, Range(0.5f, 1f)] float intervalDecay = 0.9f;
         [SerializeField, Min(0.05f)] float minInterval = 0.25f;
 
+        [Header("Boss waves")]
+        [SerializeField] Boss bossPrefab;
+        [Tooltip("Every this many waves is a boss wave. 0 turns bosses off.")]
+        [SerializeField, Min(0)] int bossEvery = 5;
+        [Tooltip("Extra boss health per earlier boss, as a fraction of its base health.")]
+        [SerializeField, Min(0f)] float bossHealthGrowth = 0.5f;
+        [Tooltip("The first boss of a run (counting from 1) whose phase two adds aimed shots. 0 never.")]
+        [SerializeField, Min(0)] int aimedShotsFromBoss = 2;
+
         Coroutine _run;
         EventChannel _events;
 
@@ -41,11 +53,11 @@ namespace AS.Waves
 
         void OnDestroy() => _events.Unsubscribe<ArenaReset>(OnArenaReset);
 
-        /// <summary>Back to before wave 1, then running again (restarted if it was still going).</summary>
-        void OnArenaReset(ArenaReset _)
+        /// <summary>Back to before the first wave, then running again (restarted if it was still going).</summary>
+        void OnArenaReset(ArenaReset e)
         {
             enabled = false;
-            CurrentWave = 0;
+            CurrentWave = Mathf.Max(1, e.FirstWave) - 1;
             enabled = true;
         }
 
@@ -71,14 +83,27 @@ namespace AS.Waves
             while (true)
             {
                 CurrentWave++;
-                var queue = BuildSpawnQueue(CurrentWave, out float interval);
-                _events.Publish(new WaveStarted(CurrentWave, queue.Count));
-
-                foreach (var prefab in queue)
+                if (bossPrefab != null && IsBossWave(CurrentWave, bossEvery))
                 {
-                    while (spawner.ActiveCount >= maxAlive) yield return null;
-                    while (!spawner.TrySpawn(prefab)) yield return null;
-                    yield return new WaitForSeconds(interval);
+                    _events.Publish(new WaveStarted(CurrentWave, 1, isBoss: true));
+                    EnemyBase boss;
+                    while (!spawner.TrySpawn(bossPrefab, out boss)) yield return null;
+                    int bossNumber = CurrentWave / bossEvery;
+                    var spawned = (Boss)boss;
+                    spawned.ScaleHealth(BossHealthMultiplier(bossNumber, bossHealthGrowth));
+                    spawned.AimedShots = aimedShotsFromBoss > 0 && bossNumber >= aimedShotsFromBoss;
+                }
+                else
+                {
+                    var queue = BuildSpawnQueue(NormalWaveNumber(CurrentWave, bossEvery), out float interval);
+                    _events.Publish(new WaveStarted(CurrentWave, queue.Count));
+
+                    foreach (var prefab in queue)
+                    {
+                        while (spawner.ActiveCount >= maxAlive) yield return null;
+                        while (!spawner.TrySpawn(prefab)) yield return null;
+                        yield return new WaitForSeconds(interval);
+                    }
                 }
 
                 while (spawner.ActiveCount > 0) yield return null;
@@ -108,6 +133,17 @@ namespace AS.Waves
             }
             return queue;
         }
+
+        public static bool IsBossWave(int waveNumber, int bossEvery) =>
+            bossEvery > 0 && waveNumber > 0 && waveNumber % bossEvery == 0;
+
+        /// <summary>Which normal wave <paramref name="waveNumber"/> is, counting only the waves that aren't boss waves.</summary>
+        public static int NormalWaveNumber(int waveNumber, int bossEvery) =>
+            bossEvery > 0 ? waveNumber - waveNumber / bossEvery : waveNumber;
+
+        /// <summary>Health multiplier for the <paramref name="bossNumber"/>th boss of a run, counting from 1.</summary>
+        public static float BossHealthMultiplier(int bossNumber, float growth) =>
+            1f + growth * Mathf.Max(0, bossNumber - 1);
 
         public static int ScaledCount(int baseCount, int extraWaves, float growth) =>
             Mathf.CeilToInt(baseCount * (1f + growth * extraWaves));

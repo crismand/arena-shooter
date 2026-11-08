@@ -54,9 +54,7 @@ namespace AS.Combat
             if (Time.time < _nextShotTime || direction.sqrMagnitude < 0.0001f) return false;
             var current = Data;
             _nextShotTime = Time.time + 1f / current.FireRate;
-
-            if (!_pools.TryGetValue(current.ProjectilePrefab, out var pool))
-                _pools[current.ProjectilePrefab] = pool = new PrefabPool<Projectile>(current.ProjectilePrefab, _poolParent);
+            var pool = PoolFor(current);
 
             direction.Normalize();
             float baseAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
@@ -73,6 +71,32 @@ namespace AS.Combat
                     new DamageInfo(current.Damage, shotDirection, gameObject), pool.Release);
             }
             return true;
+        }
+
+        /// <summary>
+        /// Fires <paramref name="count"/> projectiles evenly around a full circle, the first at
+        /// <paramref name="startAngle"/> degrees. Ignores the cooldown and the data's projectile count
+        /// and spread; the caller decides when.
+        /// </summary>
+        public void FireRing(int count, float startAngle)
+        {
+            var current = Data;
+            var pool = PoolFor(current);
+            for (int i = 0; i < count; i++)
+            {
+                var rotation = Quaternion.Euler(0f, 0f, startAngle + 360f * i / count);
+                Vector2 shotDirection = rotation * Vector3.right;
+                var projectile = pool.Get(muzzle.position, rotation);
+                projectile.Launch(shotDirection, current.ProjectileSpeed, current.ProjectileLifetime,
+                    new DamageInfo(current.Damage, shotDirection, gameObject), pool.Release);
+            }
+        }
+
+        PrefabPool<Projectile> PoolFor(WeaponData weaponData)
+        {
+            if (!_pools.TryGetValue(weaponData.ProjectilePrefab, out var pool))
+                _pools[weaponData.ProjectilePrefab] = pool = new PrefabPool<Projectile>(weaponData.ProjectilePrefab, _poolParent);
+            return pool;
         }
     }
 }

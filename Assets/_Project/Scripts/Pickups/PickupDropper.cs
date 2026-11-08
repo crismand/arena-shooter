@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using AS.Core;
 using UnityEngine;
 
@@ -5,7 +6,7 @@ namespace AS.Pickups
 {
     /// <summary>
     /// Listens for <see cref="EnemyKilled"/> in its arena and, using the enemy's drop chance, leaves a
-    /// random power-up where it died. Pickups are pooled.
+    /// power-up where it died, picked by each power-up's drop weight. Pickups are pooled.
     /// </summary>
     public class PickupDropper : MonoBehaviour
     {
@@ -18,6 +19,12 @@ namespace AS.Pickups
         EventChannel _events;
 
         public int ActiveCount => _pool.CountActive;
+
+        /// <summary>Adds every pickup that's out to <paramref name="results"/>.</summary>
+        public void GetActive(List<Pickup> results)
+        {
+            foreach (var pickup in _pool.Active) results.Add(pickup);
+        }
 
         void Awake()
         {
@@ -36,7 +43,31 @@ namespace AS.Pickups
         void OnEnemyKilled(EnemyKilled evt)
         {
             if (powerUps.Length == 0 || Random.value >= evt.DropChance) return;
-            Spawn(powerUps[Random.Range(0, powerUps.Length)], evt.Position);
+            var powerUp = PickWeighted(powerUps, Random.value);
+            if (powerUp != null) Spawn(powerUp, evt.Position);
+        }
+
+        /// <summary>
+        /// The power-up <paramref name="roll"/> (0 to 1) lands on when each takes a share of the range
+        /// in proportion to its drop weight. Null if every weight is zero.
+        /// </summary>
+        public static PowerUp PickWeighted(IReadOnlyList<PowerUp> choices, float roll)
+        {
+            float total = 0f;
+            foreach (var choice in choices) total += choice.DropWeight;
+            if (total <= 0f) return null;
+
+            float point = Mathf.Clamp01(roll) * total;
+            PowerUp last = null;
+            foreach (var choice in choices)
+            {
+                if (choice.DropWeight <= 0f) continue;
+                last = choice;
+                if (point < choice.DropWeight) return choice;
+                point -= choice.DropWeight;
+            }
+            // A roll of exactly 1 lands on the end.
+            return last;
         }
 
         public Pickup Spawn(PowerUp powerUp, Vector2 position)

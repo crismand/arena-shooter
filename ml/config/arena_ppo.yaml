@@ -1,6 +1,8 @@
-# PPO for the arena agent: the wiki's starting config, to tune from.
-# Steps are agent decisions: one every 5 physics steps (the DecisionRequester), so 2M of them
-# is about 55 hours of game time.
+# PPO for the arena agent. m1 trained with this at 2M steps; m2 sees more (a buffer sensor of
+# enemies and pickups) in a bigger game, so it got 5M; m3 adds a buffer of enemy bullets and,
+# starting fresh, gets 10M.
+# Steps are agent decisions: one every 5 physics steps (the DecisionRequester), so 5M of them
+# is about 140 hours of game time.
 behaviors:
   ArenaAgent:
     trainer_type: ppo
@@ -22,8 +24,14 @@ behaviors:
       extrinsic:
         gamma: 0.99
         strength: 1.0
-    max_steps: 2000000
+    max_steps: 10000000
     time_horizon: 128
     summary_freq: 10000
-    checkpoint_interval: 200000
+    checkpoint_interval: 500000
     keep_checkpoints: 5
+
+# Each episode starts at a random wave from 1 to this (ArenaAgent.MaxStartWaveParameter). m2_003
+# trained with 5 and got worse at the early waves without getting better at the late ones, so
+# m3 starts every episode at wave 1, the same as evaluation.
+environment_parameters:
+  max_start_wave: 1

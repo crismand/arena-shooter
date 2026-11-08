@@ -6,7 +6,7 @@ namespace AS.Feedback
 {
     /// <summary>
     /// Plays pooled particle bursts where things happen: enemy deaths (in the enemy's colour),
-    /// bullet impacts, player hits and death, and pickups. Any slot left empty is simply skipped.
+    /// bullet impacts, player hits and death, pickups and bombs. Any slot left empty is simply skipped.
     /// </summary>
     public class ParticleEffects : MonoBehaviour
     {
@@ -15,6 +15,7 @@ namespace AS.Feedback
         [SerializeField] PooledEffect playerHit;
         [SerializeField] PooledEffect playerDeath;
         [SerializeField] PooledEffect pickupCollected;
+        [SerializeField] PooledEffect bomb;
 
         readonly Dictionary<PooledEffect, PrefabPool<PooledEffect>> _pools = new();
 
@@ -25,6 +26,7 @@ namespace AS.Feedback
             EventBus.Subscribe<PlayerDamaged>(OnPlayerDamaged);
             EventBus.Subscribe<PlayerDied>(OnPlayerDied);
             EventBus.Subscribe<PickupCollected>(OnPickupCollected);
+            EventBus.Subscribe<BombDetonated>(OnBombDetonated);
         }
 
         void OnDisable()
@@ -34,6 +36,7 @@ namespace AS.Feedback
             EventBus.Unsubscribe<PlayerDamaged>(OnPlayerDamaged);
             EventBus.Unsubscribe<PlayerDied>(OnPlayerDied);
             EventBus.Unsubscribe<PickupCollected>(OnPickupCollected);
+            EventBus.Unsubscribe<BombDetonated>(OnBombDetonated);
         }
 
         void OnEnemyKilled(EnemyKilled evt) => Play(enemyDeath, evt.Position, evt.Color);
@@ -41,6 +44,7 @@ namespace AS.Feedback
         void OnPlayerDamaged(PlayerDamaged evt) => Play(playerHit, evt.Position);
         void OnPlayerDied(PlayerDied evt) => Play(playerDeath, evt.Position);
         void OnPickupCollected(PickupCollected evt) => Play(pickupCollected, evt.Position, evt.Color);
+        void OnBombDetonated(BombDetonated evt) => Play(bomb, evt.Position);
 
         /// <summary>Plays <paramref name="prefab"/> at <paramref name="position"/>. The default <paramref name="tint"/> keeps its own colour.</summary>
         public void Play(PooledEffect prefab, Vector2 position, Color tint = default)

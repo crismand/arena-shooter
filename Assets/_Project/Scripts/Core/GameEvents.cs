@@ -74,7 +74,9 @@ namespace AS.Core
     {
         public readonly Vector2 Position;
         public readonly Color Color;
-        public PickupCollected(Vector2 position, Color color) { Position = position; Color = color; }
+        /// <summary>The power-up's name, as shown to the player.</summary>
+        public readonly string Label;
+        public PickupCollected(Vector2 position, Color color, string label = "") { Position = position; Color = color; Label = label; }
     }
 
     /// <summary>A power-up took effect. Picking up the same kind again republishes with a fresh duration.</summary>
@@ -83,6 +85,14 @@ namespace AS.Core
         public readonly string Label;
         public readonly float Duration;
         public PowerUpActivated(string label, float duration) { Label = label; Duration = duration; }
+    }
+
+    /// <summary>A bomb went off: enemies within <see cref="Radius"/> were hit and enemy bullets cleared.</summary>
+    public readonly struct BombDetonated
+    {
+        public readonly Vector2 Position;
+        public readonly float Radius;
+        public BombDetonated(Vector2 position, float radius) { Position = position; Radius = radius; }
     }
 
     public readonly struct ScoreChanged
@@ -106,7 +116,17 @@ namespace AS.Core
     {
         public readonly int Number;
         public readonly int EnemyCount;
-        public WaveStarted(int number, int enemyCount) { Number = number; EnemyCount = enemyCount; }
+        /// <summary>A boss wave: the boss instead of the usual mix.</summary>
+        public readonly bool IsBoss;
+        public WaveStarted(int number, int enemyCount, bool isBoss = false) { Number = number; EnemyCount = enemyCount; IsBoss = isBoss; }
+    }
+
+    /// <summary>The boss's health, on spawn and on every hit. Zero when it dies.</summary>
+    public readonly struct BossHealthChanged
+    {
+        public readonly float Current;
+        public readonly float Max;
+        public BossHealthChanged(float current, float max) { Current = current; Max = max; }
     }
 
     /// <summary>
@@ -115,7 +135,12 @@ namespace AS.Core
     /// after dying, a disabled wave director, pooled enemies) subscribe for their whole lifetime,
     /// in Awake and OnDestroy, rather than in OnEnable.
     /// </summary>
-    public readonly struct ArenaReset { }
+    public readonly struct ArenaReset
+    {
+        /// <summary>The wave the run starts at. Below 1 (as in a default <c>new ArenaReset()</c>) means wave 1.</summary>
+        public readonly int FirstWave;
+        public ArenaReset(int firstWave) { FirstWave = firstWave; }
+    }
 
     public readonly struct WaveCleared
     {

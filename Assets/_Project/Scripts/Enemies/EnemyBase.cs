@@ -26,10 +26,15 @@ namespace AS.Enemies
 
         public EnemyData Data => data;
         public Health Health { get; private set; }
+        public Vector2 Velocity => Body.linearVelocity;
+        /// <summary>Winding up to charge, or charging: the moment to sidestep. Only Dashers do.</summary>
+        public virtual bool IsCharging => false;
         protected Rigidbody2D Body { get; private set; }
         /// <summary>The events of the arena this enemy was spawned into.</summary>
         protected EventChannel Events { get; private set; }
         protected Transform Target { get; private set; }
+        /// <summary>The spawner this enemy came from, for enemies that spawn more. Null if it was placed by hand.</summary>
+        protected EnemySpawner Spawner { get; private set; }
         protected bool HasTarget => Target != null && Target.gameObject.activeInHierarchy;
 
         protected virtual void Awake()
@@ -54,10 +59,11 @@ namespace AS.Enemies
         }
 
         /// <summary>Called by the spawner each time this enemy is taken from the pool.</summary>
-        public void Init(Transform target, Action<EnemyBase> release)
+        public void Init(Transform target, Action<EnemyBase> release, EnemySpawner spawner = null)
         {
             Target = target;
             _release = release;
+            Spawner = spawner;
             Health.ResetHealth(data.MaxHealth);
             Body.linearVelocity = Vector2.zero;
             OnSpawned();
@@ -69,13 +75,22 @@ namespace AS.Enemies
         /// <summary>Hook for per-spawn setup in subclasses (timers, random choices). Runs at the end of <see cref="Init"/>.</summary>
         protected virtual void OnSpawned() { }
 
+        /// <summary>Hook for what happens on death in subclasses (splitting). Runs after <see cref="EnemyKilled"/>, before returning to the pool.</summary>
+        protected virtual void OnKilled() { }
+
+        /// <summary>Units per second squared the body steers at this step. Defaults to the data's acceleration.</summary>
+        protected virtual float Acceleration => data.Acceleration;
+
+        /// <summary>Sets the velocity outright, e.g. to scatter enemies spawned on top of each other.</summary>
+        public void Launch(Vector2 velocity) => Body.linearVelocity = velocity;
+
         /// <summary>Direction the visual should face. Defaults to the direction of travel.</summary>
         protected virtual Vector2 FacingDirection(Vector2 desiredVelocity) => desiredVelocity;
 
         protected virtual void FixedUpdate()
         {
             Vector2 desired = HasTarget ? DesiredVelocity() : Vector2.zero;
-            Body.linearVelocity = Vector2.MoveTowards(Body.linearVelocity, desired, data.Acceleration * Time.fixedDeltaTime);
+            Body.linearVelocity = Vector2.MoveTowards(Body.linearVelocity, desired, Acceleration * Time.fixedDeltaTime);
 
             Vector2 facing = FacingDirection(desired);
             if (visual != null && facing.sqrMagnitude > 0.01f)
@@ -94,6 +109,7 @@ namespace AS.Enemies
         void OnDied()
         {
             Events.Publish(new EnemyKilled(data.ScoreValue, transform.position, data.DropChance, _color));
+            OnKilled();
             if (_release != null) _release(this);
             else Destroy(gameObject);
         }

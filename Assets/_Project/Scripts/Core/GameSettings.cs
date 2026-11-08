@@ -5,6 +5,7 @@ namespace AS.Core
     /// <summary>
     /// Player settings kept in PlayerPrefs: music and effects volume (0 to 1) and fullscreen.
     /// Setting a value stores it; <see cref="Save"/> writes the stored values to disk.
+    /// Also whether the field guide has been seen this run, which is never saved.
     /// </summary>
     public static class GameSettings
     {
@@ -33,6 +34,16 @@ namespace AS.Core
             get => PlayerPrefs.GetInt(KeyPrefix + "Fullscreen", Screen.fullScreen ? 1 : 0) == 1;
             set => PlayerPrefs.SetInt(KeyPrefix + "Fullscreen", value ? 1 : 0);
         }
+
+        /// <summary>
+        /// Set once the guide has been shown, so Play skips it for the rest of this run. Not saved, so
+        /// every launch shows it again before the first game.
+        /// </summary>
+        public static bool GuideSeen { get; set; }
+
+        // Domain reload is off for Play mode, so statics would otherwise carry over between editor sessions.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetForNewRun() => GuideSeen = false;
 
         public static void Save() => PlayerPrefs.Save();
 

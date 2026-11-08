@@ -21,13 +21,15 @@ Download the latest Windows build from [Releases](https://github.com/crismand/ar
 
 ## Features
 
-- **Three enemy types.** Chasers rush you, Shooters keep their distance and fire back, and Tanks are slow but take a beating.
-- **Waves.** Four hand-designed waves, then endless waves that keep getting bigger and faster.
-- **Power-ups.** Enemies sometimes drop Spread shot, Rapid fire or a Shield.
+- **Five enemy types.** Chasers rush you, Shooters keep their distance and fire back, Tanks are slow but take a beating, Dashers telegraph a charge and then can't steer, and Splitters break into three fast Splitlings when killed.
+- **A boss every fifth wave.** It circles you firing turning rings of bullets, summons Chasers below half health, and gets tougher each time; later bosses add aimed bursts. A health bar and a warning banner come with it.
+- **Waves.** Six hand-designed waves between the bosses, then endless waves that keep getting bigger and faster.
+- **Pickups.** Enemies sometimes drop Spread shot, Rapid fire, Homing shots, a Shield, a Health heart or a screen-clearing Bomb; the boss always drops one.
+- **Field guide.** A two-page guide to the enemies and pickups before the first run, and from the title screen.
 - **Game feel.** Screen shake, hit-stop, particle bursts, sound effects and music.
 - **High score.** Saved between sessions, shown on the title screen, the HUD and the game over screen.
 - **Menus.** A title screen, instant restarts, and settings for music and effects volume and fullscreen.
-- **Watch AI.** A trained ML-Agents model plays the arena from the title screen; press any button to take over again.
+- **Watch AI.** A trained ML-Agents model plays the arena from the title screen; press any button to return to the title.
 
 ![Game over screen with score, wave reached, best score, and Restart and Quit buttons](media/game-over.png)
 
@@ -51,15 +53,18 @@ The scene, prefabs, placeholder sprites and sounds, audio mixer and physics laye
 
 ### The ML agent
 
-`ArenaAgent` plays the player through the same `IPlayerInput` seam as a person. It sees the arena through 2D ray sensors and its own position, velocity, health, aim and cooldown, and is rewarded for kills and for staying alive. It was trained with PPO in a headless training build; `ml/` has the pinned Python environment, the config, `train.ps1` and `evaluate.py` (see [ml/README.md](ml/README.md)). The shipped model, `Assets/_Project/Models/ArenaAgent.onnx`, runs on Inference Engine in the game, with no Python needed.
+`ArenaAgent` plays the player through the same `IPlayerInput` seam as a person. It sees every enemy and pickup and the 24 nearest enemy bullets through two buffer sensors, walls through 2D ray sensors, and its own position, velocity, health, aim, cooldown, enemies left and wave. It's rewarded for kills, clearing waves and collecting pickups, and pays for every hit, for dying, and for every step while enemies remain. It was trained with PPO in a headless training build; `ml/` has the pinned Python environment, the config, `train.ps1` and `evaluate.py` (see [ml/README.md](ml/README.md)). The shipped model, `Assets/_Project/Models/ArenaAgent.onnx`, runs on Inference Engine in the game, with no Python needed.
 
-Over 50 evaluation episodes each:
+The shipped model is `m3_001`, trained for 10M steps. Over 50 evaluation episodes each in the v1.3.0 arena, starting at wave 1:
 
-| Policy | Survival | Kills | Died |
-|---|---|---|---|
-| Idle | 9.3 s | 0 | 100% |
-| Random | 13.7 s | 2.6 | 100% |
-| Trained (`m1_001`, 2M steps) | 48.6 s | 11.5 | 48% |
+| Policy | Survival | Kills | Wave reached | Died |
+|---|---|---|---|---|
+| Idle | 9.0 s | 0 | 1.0 | 100% |
+| Random | 11.4 s | 2.3 | 1.0 | 100% |
+| `m1_001` (v1.2.0's model) | 151.6 s | 12.9 | 2.0 | 58% |
+| **`m3_001`** | 82.8 s | **21.1** | **3.0** | 88% |
+
+`m3` kills more and gets further than `m1`, which lasts longer by keeping out of the way rather than clearing waves. Neither has reached the boss yet.
 
 The design, training setup and what's next for the agent are on the wiki's [ML Agent](https://github.com/crismand/arena-shooter/wiki/ML-Agent) page.
 
@@ -67,8 +72,8 @@ The design, training setup and what's next for the agent are on the wiki's [ML A
 
 The tests live in `Assets/_Project/Tests`. Run them from **Window → General → Test Runner**:
 
-- **EditMode** (`AS.Tests.EditMode`): the event bus and arena channels, state machine, high score and settings storage, wave scaling and object pool, the agent's action mapping, plus checks that every data asset and prefab is wired up correctly and that no game assembly depends on ML-Agents.
-- **PlayMode** (`AS.Tests.PlayMode`): play the real scene with simulated keyboard and mouse input, plus the training scene's episodes and Watch AI.
+- **EditMode** (`AS.Tests.EditMode`): the event bus and arena channels, state machine, high score and settings storage, wave and boss scaling and object pool, the agent's action mapping, that the shipped model matches the agent's sensors, plus checks that every data asset and prefab is wired up correctly and that no game assembly depends on ML-Agents.
+- **PlayMode** (`AS.Tests.PlayMode`): play the real scene with simulated keyboard and mouse input, plus the enemies, pickups and boss, the training scene's episodes, rewards and sensors, and Watch AI.
 
 They can also run headless with the editor closed:
 
@@ -115,10 +120,10 @@ The `.ulf` file appears after activating a Personal license in Unity Hub (Prefer
 1. Merge `dev` into `main` through a pull request (the tests must pass).
 2. Tag the merge commit on `main` and push the tag:
    ```bash
-   git tag -a v1.2.0 -m "Arena Shooter v1.2.0"
-   git push origin v1.2.0
+   git tag -a v1.3.0 -m "Arena Shooter v1.3.0"
+   git push origin v1.3.0
    ```
-3. The Release workflow tests, builds and creates a draft release with `ArenaShooter-v1.2.0-windows-x64.zip`. Edit the notes on GitHub, then press **Publish release**.
+3. The Release workflow tests, builds and creates a draft release with `ArenaShooter-v1.3.0-windows-x64.zip`. Edit the notes on GitHub, then press **Publish release**.
 
 ## Roadmap
 
