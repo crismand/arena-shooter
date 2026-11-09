@@ -57,36 +57,48 @@ Two new enemies, three new pickups and a boss, then a new agent trained on the b
 
 The pass mark was: over 50 evaluation episodes in the v1.3.0 arena, beat `m1` on mean survival time and mean kills, reach the first boss wave in most episodes, and keep beating the random and idle agents. `m3` ships having met part of it. It beats `m1` on kills (21.1 against 12.9) and waves reached (3.0 against 2.0), and both baselines. It doesn't beat `m1` on survival (83 s against 152 s), because `m1` lasts by keeping out of the way rather than clearing waves. It never reaches the boss. The boss stays the target for the next agent.
 
-## Next: agent m4, aiming and the boss
+## Next: v1.4.0, replay value, feel and agent m4
 
-Watching `m3` in v1.3.0: it moves well and aims well once it has fixed on a target, but between targets its aim swings around and it fires nonstop, which looks much like the random agent. That fits how it was trained. Aim only matters when a shot could hit something, firing costs nothing, and only kills pay, which is rare feedback (a Tank takes several hits). These changes only touch rewards, not observations or actions, so the model's inputs stay the same and `m4` can continue from `m3` (`-InitializeFrom m3_001`) instead of training fresh. Each step is a branch off `dev`.
+More reason to replay a run, a game that feels better to play, and an agent that aims. The game changes leave enemies, pickups and the arena as they are, so the agent sees the same game and `m4` can continue from `m3`'s model. They also don't depend on the agent, so they can be built while `m4` trains. Each step is a branch off `dev`.
+
+### Game
 
 | Step | What |
 |---|---|
-| 1. Hit reward | A small reward for each of the player's shots that hits an enemy (around +0.05, against +0.3 per kill), so aiming gets feedback on every hit and not only on kills. Counted from the player's projectiles, not from `EnemyDamaged`, which a Bomb pickup also raises. |
-| 2. Shot cost | A small cost per shot fired (around −0.001: holding fire with the Blaster for the 83 s `m3` lasts costs about 0.7), so firing at nothing stops paying and it learns to hold fire between targets. Per shot rather than per step, so Rapid and Spread cost what they fire. |
-| 3. Steadier aim | Optional, if steps 1 and 2 leave the aim restless: a small cost on large aim changes between decisions. |
-| 4. Train and compare | `m4_001` from `m3_001` with the new rewards, evaluated over 50 episodes from wave 1 against `m3`'s saved results (`evaluate.py --against`). `evaluate.py` also reports accuracy (hits per shot), which needs a hits and shots stat from the agent. |
-| 5. Release | README, wiki and roadmap updated, and Watch AI on `m4` if it passes. |
+| 1. Score combo | Kills in quick succession raise a score multiplier (for example up to x5, dropping back after about 2 s without a kill), shown on the HUD next to the score. Bomb kills count. The agent never sees the score, so its training is unaffected. |
+| 2. Top-10 board | A local top-10 instead of the single best score: three initials entered at game over (keyboard or gamepad) when a score makes the board, and the board on the title screen. Saved like the best score is now, which it replaces. |
+| 3. Game feel | Squash and stretch when enemies spawn and die, a muzzle flash on the player's shots, and gamepad rumble on hits taken and on death, with a rumble toggle in Settings. |
+| 4. Watch AI overlay | While watching, a panel shows the agent's kills, wave and accuracy (hits per shot), and a "From the boss" option starts the watch at wave 5, using the start-wave support `ResetArena` already has, so you don't wait through four waves to see the boss fight. |
+
+### Agent m4: aiming
+
+Watching `m3` in v1.3.0: it moves well and aims well once it has fixed on a target, but between targets its aim swings around and it fires nonstop, which looks much like the random agent. That fits how it was trained. Aim only matters when a shot could hit something, firing costs nothing, and only kills pay, which is rare feedback (a Tank takes several hits). These changes only touch rewards, not observations or actions, so the model's inputs stay the same and `m4` can continue from `m3` (`-InitializeFrom m3_001`) instead of training fresh.
+
+| Step | What |
+|---|---|
+| 5. Hit reward | A small reward for each of the player's shots that hits an enemy (around +0.05, against +0.3 per kill), so aiming gets feedback on every hit and not only on kills. Counted from the player's projectiles, not from `EnemyDamaged`, which a Bomb pickup also raises. |
+| 6. Shot cost | A small cost per shot fired (around −0.001: holding fire with the Blaster for the 83 s `m3` lasts costs about 0.7), so firing at nothing stops paying and it learns to hold fire between targets. Per shot rather than per step, so Rapid and Spread cost what they fire. |
+| 7. Steadier aim | Optional, if steps 5 and 6 leave the aim restless: a small cost on large aim changes between decisions. |
+| 8. Train and compare | `m4_001` from `m3_001` with the new rewards, evaluated over 50 episodes from wave 1 against `m3`'s saved results (`evaluate.py --against`). `evaluate.py` also reports accuracy (hits per shot), which needs a hits and shots stat from the agent. |
 
 The pass mark: over 50 evaluation episodes, beat `m3` on accuracy without doing worse on kills or waves reached, and keep beating the random and idle agents. Reaching the boss on wave 5 stays the bigger target. If accuracy improves but waves don't, the next things to try are training longer and a start-wave curriculum that only moves on once waves 1-4 are reliable.
+
+### Release
+
+| Step | What |
+|---|---|
+| 9. Release | README, wiki (Gameplay, ML Agent, Releases) and roadmap updated, Watch AI on `m4` if it passes, and the v1.4.0 tag. Also settle the local `SENTIS_ANALYTICS_ENABLED` change in ProjectSettings that has stayed uncommitted since v1.3.0: commit it or revert it. |
 
 ## Ideas for next
 
 Nothing below is committed to yet. These are candidates, roughly in the order they would pay off.
 
-### Small improvements
-- [ ] Gamepad rumble on hits and deaths.
-
 ### More game
-- [ ] More arenas, moved between without reloading the whole game.
-- [ ] Score multiplier for kills in quick succession.
-- [ ] Local top-10 leaderboard instead of a single best score.
+- [ ] More arenas, moved between without reloading the whole game. A new arena changes what the agent sees, so it fits a release whose agent trains fresh.
 
 ### Presentation
 - [ ] Replace the placeholder shapes, sounds and music with real art and audio.
-- [ ] Simple animation: squash and stretch on spawn and death, a muzzle flash.
 
 ### Reach and tooling
-- [ ] WebGL build that runs in a browser (for example on itch.io).
+- [ ] WebGL build that runs in a browser (for example on itch.io). Check first that Watch AI's model runs on the web.
 - [x] GitHub Actions that run the EditMode and PlayMode tests on pushes to `dev` and pull requests into `main`, and attach a Windows build to tagged releases.
